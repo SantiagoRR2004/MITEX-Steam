@@ -16,7 +16,7 @@ def fetch_reviews(id: int, videogame: str) -> None:
         - None
     """
     currentDirectory = os.path.dirname(os.path.abspath(__file__))
-    dataDirectory = os.path.join(currentDirectory, "data")
+    dataDirectory = os.path.join(currentDirectory, "rawData")
     os.makedirs(dataDirectory, exist_ok=True)
 
     url = f"https://store.steampowered.com/appreviews/{id}?json=1"
@@ -37,7 +37,6 @@ def fetch_reviews(id: int, videogame: str) -> None:
 
                 for review in data["reviews"]:
                     important = {
-                        "positive": review["voted_up"],
                         "score": float(review["weighted_vote_score"]),
                         "review": review["review"],
                     }
@@ -45,5 +44,10 @@ def fetch_reviews(id: int, videogame: str) -> None:
                     file.write("\n")
 
 
-terrariaID = 105600
-fetch_reviews(terrariaID, "Terraria")
+currentDirectory = os.path.dirname(os.path.abspath(__file__))
+videogamesPath = os.path.join(currentDirectory, "videogames.json")
+with open(videogamesPath, "r", encoding="utf-8") as file:
+    videogames = json.load(file)
+
+for videogame, id in videogames.items():
+    fetch_reviews(id, videogame)
