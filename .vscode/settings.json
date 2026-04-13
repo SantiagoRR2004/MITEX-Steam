@@ -5,5 +5,5 @@
       // In this case, all files will trigger the task
     ]
   },
-  "python.terminal.activateEnvironment": true,
+  "python.terminal.activateEnvironment": true
 }
