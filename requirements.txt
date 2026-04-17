@@ -1,3 +1,4 @@
 black
-tqdm
+langdetect
 requests
+tqdm
