@@ -1,8 +1,53 @@
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from langdetect import detect_langs, LangDetectException
 import json
 import tqdm
 import re
 import os
+
+
+def cleanFile(inputPath: str, outputPath: str, videogame: str, reviewType: str) -> dict:
+    """
+    Cleans the reviews in the input file and writes the cleaned reviews to the output file.
+
+    Args:
+        - inputPath (str): The path to the input JSONL file containing the reviews.
+        - outputPath (str): The path to the output JSONL file where the cleaned reviews will be written.
+        - videogame (str): The name of the video game for which to clean reviews.
+        - reviewType (str): The type of reviews to clean ("positive" or "negative").
+
+    Returns:
+        - dict: A dictionary containing the non-English languages found in the cleaned reviews.
+    """
+    differentLanguages = {}
+
+    with open(inputPath, "r", encoding="utf-8") as infile, open(
+        outputPath, "w", encoding="utf-8"
+    ) as outfile:
+
+        for line in infile:
+            lineData = json.loads(line)
+
+            try:
+                results = detect_langs(lineData["review"])
+                output = {r.lang: r.prob for r in results}
+
+                if "en" in output and output["en"] > 0.9:
+                    json.dump(lineData, outfile, ensure_ascii=False)
+                    outfile.write("\n")
+                else:
+                    for lang, prob in output.items():
+                        if lang != "en":
+                            differentLanguages[lang] = (
+                                differentLanguages.get(lang, 0) + 1
+                            )
+
+            except LangDetectException as e:
+                differentLanguages["gibberish"] = (
+                    differentLanguages.get("gibberish", 0) + 1
+                )
+
+    return {f"{videogame} {reviewType.capitalize()}": differentLanguages}
 
 
 def obtainReviewStructure() -> dict:
@@ -62,41 +107,34 @@ def onlyEnglish():
     cleanDataFolder = os.path.join(currentDirectory, "cleanData")
     os.makedirs(cleanDataFolder, exist_ok=True)
 
-    languageLog = {}
     reviewPaths = obtainReviewStructure()
 
-    for game in tqdm.tqdm(reviewPaths.keys(), desc="Filtering reviews"):
-        languageLog[game] = {}
+    futures = []
+    languageLog = {}
+    progressBar = tqdm.tqdm(total=2 * len(reviewPaths), desc="Processing files")
 
-        for t in ["positive", "negative"]:
-            inputPath = reviewPaths[game][t]
-            outputPath = os.path.join(cleanDataFolder, f"{game}{t.capitalize()}.jsonl")
+    with ProcessPoolExecutor() as executor:
 
-            with open(inputPath, "r", encoding="utf-8") as infile, open(
-                outputPath, "w", encoding="utf-8"
-            ) as outfile:
+        for game in reviewPaths.keys():
 
-                for line in infile:
-                    lineData = json.loads(line)
+            for t in ["positive", "negative"]:
+                inputPath = reviewPaths[game][t]
+                outputPath = os.path.join(
+                    cleanDataFolder, f"{game}{t.capitalize()}.jsonl"
+                )
 
-                    try:
-                        results = detect_langs(lineData["review"])
-                        output = {r.lang: r.prob for r in results}
+                futures.append(
+                    executor.submit(
+                        cleanFile, inputPath, outputPath, game, reviewType=t
+                    )
+                )
 
-                        if "en" in output and output["en"] > 0.9:
-                            json.dump(lineData, outfile, ensure_ascii=False)
-                            outfile.write("\n")
-                        else:
-                            for lang, prob in output.items():
-                                if lang != "en":
-                                    languageLog[game][lang] = (
-                                        languageLog[game].get(lang, 0) + 1
-                                    )
+        for future in as_completed(futures):
+            result = future.result()
+            languageLog.update(result)
+            progressBar.update(1)
 
-                    except LangDetectException as e:
-                        languageLog[game]["gibberish"] = (
-                            languageLog[game].get("gibberish", 0) + 1
-                        )
+    progressBar.close()
 
     # Sort language log by game name and then by language
     languageLog = dict(
