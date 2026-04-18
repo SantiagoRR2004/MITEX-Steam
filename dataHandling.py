@@ -50,22 +50,19 @@ def cleanFile(inputPath: str, outputPath: str, videogame: str, reviewType: str) 
     return {f"{videogame} {reviewType.capitalize()}": differentLanguages}
 
 
-def obtainReviewStructure() -> dict:
+def obtainReviewStructure(folderPath: str) -> dict:
     """
-    Scans the "rawData" folder for JSONL files containing positive and negative reviews of video games.
+    Scans the folder for JSONL files containing positive and negative reviews of video games.
 
     Args:
-        - None
+        - folderPath (str): The path to the folder containing the review files.
 
     Returns:
         - dict: A dictionary mapping each video game name to the file paths of its positive and negative reviews.
     """
-    currentDirectory = os.path.dirname(os.path.abspath(__file__))
-    rawDataFolder = os.path.join(currentDirectory, "rawData")
-
     reviewFiles = {}
 
-    for filename in os.listdir(rawDataFolder):
+    for filename in os.listdir(folderPath):
         if filename.endswith(".jsonl"):
 
             if filename.endswith("Positive.jsonl"):
@@ -82,7 +79,7 @@ def obtainReviewStructure() -> dict:
             if name not in reviewFiles:
                 reviewFiles[name] = {}
 
-            reviewFiles[name][reviewType] = os.path.join(rawDataFolder, filename)
+            reviewFiles[name][reviewType] = os.path.join(folderPath, filename)
 
     # Check that each game has both positive and negative reviews
     for name, reviewTypes in reviewFiles.items():
@@ -107,7 +104,7 @@ def onlyEnglish():
     cleanDataFolder = os.path.join(currentDirectory, "cleanData")
     os.makedirs(cleanDataFolder, exist_ok=True)
 
-    reviewPaths = obtainReviewStructure()
+    reviewPaths = obtainReviewStructure(os.path.join(currentDirectory, "rawData"))
 
     futures = []
     languageLog = {}
