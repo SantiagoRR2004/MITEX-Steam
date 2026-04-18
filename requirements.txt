@@ -1,4 +1,7 @@
 black
+bertopic
 langdetect
+nltk
 requests
+scikit-learn
 tqdm
