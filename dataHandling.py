@@ -21,6 +21,10 @@ def cleanFile(inputPath: str, outputPath: str, videogame: str, reviewType: str) 
     """
     differentLanguages = {}
 
+    # Check that the input file is not empty
+    if os.path.getsize(inputPath) == 0:
+        return {f"{videogame} {reviewType.capitalize()}": differentLanguages}
+
     with open(inputPath, "r", encoding="utf-8") as infile, open(
         outputPath, "w", encoding="utf-8"
     ) as outfile:
