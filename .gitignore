@@ -1,6 +1,7 @@
 __pycache__
 .venv/
 
+rawData/
 cleanData/
 languageLog.json
 videogameClusters.json
