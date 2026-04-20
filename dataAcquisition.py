@@ -143,6 +143,33 @@ def fetchReviews(id: int, videogame: str) -> None:
                             file.write("\n")
 
 
+def fetchGameInfo(id: int, videogame: str) -> None:
+    """
+    Fetches detailed information for a given video game from the Steam store
+    and saves it in a JSON file.
+
+    Args:
+        - id (int): The Steam app ID of the video game.
+        - videogame (str): The name of the video game, used for naming the output file.
+
+    Returns:
+        - None
+    """
+    currentDirectory = os.path.dirname(os.path.abspath(__file__))
+    dataDirectory = os.path.join(currentDirectory, "rawData")
+    gameInfoPath = os.path.join(dataDirectory, f"{videogame}Info.json")
+
+    if not os.path.exists(gameInfoPath):
+        url = f"https://store.steampowered.com/api/appdetails?appids={id}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            if data[str(id)]["success"]:
+                with open(gameInfoPath, "w", encoding="utf-8") as file:
+                    json.dump(data[str(id)]["data"], file, indent=2, ensure_ascii=False)
+                    file.write("\n")
+
+
 def getAllGames() -> None:
     """
     Fetches reviews for all video games listed in the "videogames.json" file.
@@ -159,8 +186,11 @@ def getAllGames() -> None:
     with open(videogamesPath, "r", encoding="utf-8") as file:
         videogames = json.load(file)
 
-    for videogame, id in tqdm.tqdm(videogames.items(), desc="Fetching reviews"):
+    for videogame, id in tqdm.tqdm(
+        videogames.items(), desc="Fetching reviews and info"
+    ):
         fetchReviews(id, videogame)
+        fetchGameInfo(id, videogame)
 
 
 if __name__ == "__main__":
