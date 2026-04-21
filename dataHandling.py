@@ -51,6 +51,10 @@ def cleanFile(inputPath: str, outputPath: str, videogame: str, reviewType: str) 
                     differentLanguages.get("gibberish", 0) + 1
                 )
 
+    # If the output file is empty, remove it
+    if os.path.getsize(outputPath) == 0:
+        os.remove(outputPath)
+
     return {f"{videogame} {reviewType.capitalize()}": differentLanguages}
 
 
@@ -84,12 +88,6 @@ def obtainReviewStructure(folderPath: str) -> dict:
                 reviewFiles[name] = {}
 
             reviewFiles[name][reviewType] = os.path.join(folderPath, filename)
-
-    # Check that each game has both positive and negative reviews
-    for name, reviewTypes in reviewFiles.items():
-        assert (
-            len(reviewTypes) == 2
-        ), f"{name} does not have both positive and negative reviews."
 
     return reviewFiles
 
