@@ -8,6 +8,77 @@ import json
 import tqdm
 import os
 
+multilingualModel = SentenceTransformer("all-MiniLM-L6-v2")
+
+
+def extractiveSummaryFile(inputPath: str, outputPath: str) -> None:
+    """
+    Perform extractive summarization on the reviews in the input file
+    and save the summary to the output file.
+
+    For the personalization we use the scores that Steam gives to each review.
+
+    This was mean to be parallelized, but it becomes slower.
+
+    Args:
+        - inputPath (str): The path to the input JSONL file containing the reviews.
+        - outputPath (str): The path to the output JSON file where the summary will be written.
+
+    Returns:
+        - None
+    """
+    sentences = []
+    personalization = {}
+
+    with open(inputPath, "r", encoding="utf-8") as f:
+        for line in f:
+            review = eval(line)["review"]
+
+            newSentences = [
+                sentence.strip()
+                for sentence in sent_tokenize(review, language="english")
+                if sentence.strip()
+            ]
+
+            sentences.extend(newSentences)
+            personalization.update(
+                {
+                    len(sentences) - len(newSentences) + i: eval(line)["score"]
+                    for i in range(len(newSentences))
+                }
+            )
+
+    # Build sentence embeddings and pairwise cosine similarity matrix
+    embeddings = multilingualModel.encode(sentences)
+    similarity = cosine_similarity(embeddings)
+
+    similarityThreshold = 0.3
+    graph = nx.Graph()
+    graph.add_nodes_from(range(len(sentences)))
+
+    for i in range(len(sentences)):
+        for j in range(i + 1, len(sentences)):
+            weight = float(similarity[i][j])
+
+            if weight >= similarityThreshold:
+                graph.add_edge(i, j, weight=weight)
+
+    # Use PageRank to rank sentence centrality in the semantic graph
+    scores = nx.pagerank(
+        graph, alpha=0.85, weight="weight", personalization=personalization
+    )
+    topSentences = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:5]
+
+    # Save output to JSON file
+    results = [sentences[index] for index, score in topSentences]
+
+    with open(
+        outputPath,
+        "w",
+    ) as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
 
 def extractiveSummary() -> None:
     """
@@ -27,54 +98,24 @@ def extractiveSummary() -> None:
         os.path.join(currentDirectory, "cleanData")
     )
 
-    multilingualModel = SentenceTransformer("all-MiniLM-L6-v2")
+    progressBar = tqdm.tqdm(
+        total=sum(len(paths) for paths in reviewPaths.values()),
+        desc="Summarizing reviews",
+    )
 
-    for game, reviewTypes in tqdm.tqdm(reviewPaths.items(), desc="Summarizing reviews"):
+    for game, reviewTypes in reviewPaths.items():
 
         for reviewType, path in reviewTypes.items():
-            sentences = []
 
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    review = eval(line)["review"]
-                    sentences.extend(
-                        [
-                            sentence.strip()
-                            for sentence in sent_tokenize(review, language="english")
-                            if sentence.strip()
-                        ]
-                    )
+            extractiveSummaryFile(
+                inputPath=path,
+                outputPath=os.path.join(
+                    summaryFolder, f"{game}{reviewType.capitalize()}.json"
+                ),
+            )
+            progressBar.update(1)
 
-            # Build sentence embeddings and pairwise cosine similarity matrix
-            embeddings = multilingualModel.encode(sentences)
-            similarity = cosine_similarity(embeddings)
-
-            similarityThreshold = 0.35
-            graph = nx.Graph()
-            graph.add_nodes_from(range(len(sentences)))
-
-            for i in range(len(sentences)):
-                for j in range(i + 1, len(sentences)):
-                    weight = float(similarity[i][j])
-
-                    if weight >= similarityThreshold:
-                        graph.add_edge(i, j, weight=weight)
-
-            # Use PageRank to rank sentence centrality in the semantic graph
-            scores = nx.pagerank(graph, alpha=0.85, weight="weight")
-            topSentences = sorted(
-                scores.items(), key=lambda item: item[1], reverse=True
-            )[:5]
-
-            # Save output to JSON file
-            results = [sentences[index] for index, score in topSentences]
-
-            with open(
-                os.path.join(summaryFolder, f"{game}{reviewType.capitalize()}.json"),
-                "w",
-            ) as f:
-                json.dump(results, f, ensure_ascii=False, indent=2)
-                f.write("\n")
+    progressBar.close()
 
 
 if __name__ == "__main__":
