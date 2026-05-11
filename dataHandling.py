@@ -2,7 +2,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from langdetect import detect_langs, LangDetectException
 import json
 import tqdm
-import re
 import os
 
 
@@ -58,6 +57,34 @@ def cleanFile(inputPath: str, outputPath: str, videogame: str, reviewType: str) 
     return {f"{videogame} {reviewType.capitalize()}": differentLanguages}
 
 
+def obtainPreviousLanguageLog(videogame: str, reviewType: str) -> dict:
+    """
+    Obtains the language log for a given video game and review type from the existing language log file.
+
+    This should only be used if the cleaned data already exists.
+
+    Args:
+        - videogame (str): The name of the video game.
+        - reviewType (str): The type of reviews ("positive" or "negative").
+
+    Returns:
+        - dict: A dictionary containing the non-English languages found
+            in the reviews for the given video game and review type.
+    """
+    currentDirectory = os.path.dirname(os.path.abspath(__file__))
+    languageLogPath = os.path.join(currentDirectory, "languageLog.json")
+
+    if not os.path.exists(languageLogPath):
+        return {}
+
+    with open(languageLogPath, "r", encoding="utf-8") as f:
+        languageLog = json.load(f)
+
+    fullName = f"{videogame} {reviewType.capitalize()}"
+
+    return {fullName: languageLog.get(fullName, {})}
+
+
 def obtainReviewStructure(folderPath: str) -> dict:
     """
     Scans the folder for JSONL files containing positive and negative reviews of video games.
@@ -92,12 +119,12 @@ def obtainReviewStructure(folderPath: str) -> dict:
     return reviewFiles
 
 
-def onlyEnglish():
+def onlyEnglish(forceRefresh: bool = False) -> None:
     """
     Remove the reviews that are not in English
 
     Args:
-        - None
+        - forceRefresh (bool): Whether to refresh the cleaned data even if it already exists.
 
     Returns:
         - None
@@ -116,17 +143,23 @@ def onlyEnglish():
 
         for game in reviewPaths.keys():
 
-            for t in ["positive", "negative"]:
+            for t in reviewPaths[game].keys():
                 inputPath = reviewPaths[game][t]
                 outputPath = os.path.join(
                     cleanDataFolder, f"{game}{t.capitalize()}.jsonl"
                 )
 
-                futures.append(
-                    executor.submit(
-                        cleanFile, inputPath, outputPath, game, reviewType=t
+                if forceRefresh or not os.path.exists(outputPath):
+                    futures.append(
+                        executor.submit(
+                            cleanFile, inputPath, outputPath, game, reviewType=t
+                        )
                     )
-                )
+
+                else:
+                    futures.append(
+                        executor.submit(obtainPreviousLanguageLog, game, reviewType=t)
+                    )
 
         for future in as_completed(futures):
             result = future.result()
