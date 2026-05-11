@@ -80,12 +80,13 @@ def extractiveSummaryFile(inputPath: str, outputPath: str) -> None:
         f.write("\n")
 
 
-def extractiveSummary() -> None:
+def extractiveSummary(forceRefresh: bool = False) -> None:
     """
     Perform extractive summarization on the cleaned reviews using a graph-based approach.
 
     Args:
-        - None
+        - forceRefresh (bool): Whether to refresh the summary data even if it already exists.
+
 
     Returns:
         - None
@@ -107,12 +108,16 @@ def extractiveSummary() -> None:
 
         for reviewType, path in reviewTypes.items():
 
-            extractiveSummaryFile(
-                inputPath=path,
-                outputPath=os.path.join(
-                    summaryFolder, f"{game}{reviewType.capitalize()}.json"
-                ),
+            outputPath = os.path.join(
+                summaryFolder, f"{game}{reviewType.capitalize()}.json"
             )
+
+            if forceRefresh or not os.path.exists(outputPath):
+                extractiveSummaryFile(
+                    inputPath=path,
+                    outputPath=outputPath,
+                )
+
             progressBar.update(1)
 
     progressBar.close()

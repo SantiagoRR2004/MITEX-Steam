@@ -1,4 +1,3 @@
-from datetime import datetime
 import requests
 import random
 import json
@@ -93,7 +92,7 @@ def updateVideogames() -> None:
         f.write("\n")
 
 
-def fetchReviews(id: int, videogame: str) -> None:
+def fetchReviews(id: int, videogame: str, forceRefresh: bool = False) -> None:
     """
     Fetches reviews for a given video game from the Steam store
     and saves them as JSONL files.
@@ -103,6 +102,7 @@ def fetchReviews(id: int, videogame: str) -> None:
     Args:
         - id (int): The Steam app ID of the video game.
         - videogame (str): The name of the video game, used for naming the output files.
+        - forceRefresh (bool): Whether to fetch reviews even if the output file already exists.
 
     Returns:
         - None
@@ -120,8 +120,7 @@ def fetchReviews(id: int, videogame: str) -> None:
             dataDirectory, f"{videogame}{reviewType.capitalize()}.jsonl"
         )
 
-        # Only fetch reviews if the output file doesn't already exist
-        if not os.path.exists(outputPath):
+        if not os.path.exists(outputPath) or forceRefresh:
 
             parameters["review_type"] = reviewType
             response = requests.get(url, params=parameters)
@@ -143,7 +142,7 @@ def fetchReviews(id: int, videogame: str) -> None:
                             file.write("\n")
 
 
-def fetchGameInfo(id: int, videogame: str) -> None:
+def fetchGameInfo(id: int, videogame: str, forceRefresh: bool = False) -> None:
     """
     Fetches detailed information for a given video game from the Steam store
     and saves it in a JSON file.
@@ -151,6 +150,7 @@ def fetchGameInfo(id: int, videogame: str) -> None:
     Args:
         - id (int): The Steam app ID of the video game.
         - videogame (str): The name of the video game, used for naming the output file.
+        - forceRefresh (bool): Whether to fetch game info even if the output file already exists.
 
     Returns:
         - None
@@ -159,7 +159,7 @@ def fetchGameInfo(id: int, videogame: str) -> None:
     dataDirectory = os.path.join(currentDirectory, "rawData")
     gameInfoPath = os.path.join(dataDirectory, f"{videogame}Info.json")
 
-    if not os.path.exists(gameInfoPath):
+    if not os.path.exists(gameInfoPath) or forceRefresh:
         url = f"https://store.steampowered.com/api/appdetails?appids={id}"
         response = requests.get(url)
         if response.status_code == 200:
@@ -170,7 +170,7 @@ def fetchGameInfo(id: int, videogame: str) -> None:
                     file.write("\n")
 
 
-def getAllGames() -> None:
+def getAllGames(forceRefresh: bool = False) -> None:
     """
     Fetches reviews for all video games listed in the "videogames.json" file.
 
@@ -189,9 +189,9 @@ def getAllGames() -> None:
     for videogame, id in tqdm.tqdm(
         videogames.items(), desc="Fetching reviews and info"
     ):
-        fetchReviews(id, videogame)
-        fetchGameInfo(id, videogame)
+        fetchReviews(id, videogame, forceRefresh=forceRefresh)
+        fetchGameInfo(id, videogame, forceRefresh=forceRefresh)
 
 
 if __name__ == "__main__":
-    updateVideogames()
+    updateVideogames(True)
