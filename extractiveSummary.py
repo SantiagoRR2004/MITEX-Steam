@@ -1,17 +1,17 @@
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
 from nltk.tokenize import sent_tokenize
 import networkx as nx
 import dataHandling
-import numpy as np
+import models
 import json
 import tqdm
+import rag
 import os
 
-multilingualModel = SentenceTransformer("all-MiniLM-L6-v2")
 
-
-def extractiveSummaryFile(inputPath: str, outputPath: str) -> None:
+def extractiveSummaryFile(
+    inputPath: str, outputPath: str, videogame: str, reviewType: str
+) -> None:
     """
     Perform extractive summarization on the reviews in the input file
     and save the summary to the output file.
@@ -23,6 +23,8 @@ def extractiveSummaryFile(inputPath: str, outputPath: str) -> None:
     Args:
         - inputPath (str): The path to the input JSONL file containing the reviews.
         - outputPath (str): The path to the output JSON file where the summary will be written.
+        - videogame (str): The name of the videogame associated with the reviews.
+        - reviewType (str): The type of the reviews (e.g., "positive", "negative").
 
     Returns:
         - None
@@ -49,7 +51,7 @@ def extractiveSummaryFile(inputPath: str, outputPath: str) -> None:
             )
 
     # Build sentence embeddings and pairwise cosine similarity matrix
-    embeddings = multilingualModel.encode(sentences)
+    embeddings = models.EMBEDDING_MODEL.encode(sentences)
     similarity = cosine_similarity(embeddings)
 
     similarityThreshold = 0.3
@@ -71,6 +73,10 @@ def extractiveSummaryFile(inputPath: str, outputPath: str) -> None:
 
     # Save output to JSON file
     results = [sentences[index] for index, score in topSentences]
+
+    rag.addReviewToCollection(
+        reviews=results, videogame=videogame, reviewType=reviewType
+    )
 
     with open(
         outputPath,
@@ -116,6 +122,8 @@ def extractiveSummary(forceRefresh: bool = False) -> None:
                 extractiveSummaryFile(
                     inputPath=path,
                     outputPath=outputPath,
+                    videogame=game,
+                    reviewType=reviewType,
                 )
 
             progressBar.update(1)

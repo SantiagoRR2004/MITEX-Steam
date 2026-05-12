@@ -6,3 +6,4 @@ cleanData/
 languageLog.json
 videogameClusters.json
 summaryData/
+db/
