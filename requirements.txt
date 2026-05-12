@@ -5,3 +5,6 @@ nltk
 requests
 scikit-learn
 tqdm
+python-dotenv
+chromadb
+rank_bm25
