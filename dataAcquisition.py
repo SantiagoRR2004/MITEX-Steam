@@ -194,4 +194,4 @@ def getAllGames(forceRefresh: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    updateVideogames(True)
+    updateVideogames()
