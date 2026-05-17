@@ -53,11 +53,17 @@ def addReviewToCollection(reviews: list[str], videogame: str, reviewType: str) -
     newReviews = []
     reviewIds = []
     newMetadata = []
+    seenIds = set()
 
     # Check which reviews are new
     for review in reviews:
         text = f"{videogame}:{review}"
         reviewID = hashlib.sha256(text.encode()).hexdigest()
+
+        if reviewID in seenIds:
+            continue
+
+        seenIds.add(reviewID)
 
         existing = COLLECTION.get(ids=[reviewID])
 
