@@ -1,3 +1,5 @@
+from datetime import datetime
+import pandas as pd
 import requests
 import random
 import json
@@ -48,9 +50,15 @@ def updateVideogames() -> None:
     """
     currentDirectory = os.path.dirname(os.path.abspath(__file__))
     videogamesFile = os.path.join(currentDirectory, "videogames.json")
+    topSellersFile = os.path.join(currentDirectory, "topSellers.csv")
 
     with open(videogamesFile, "r", encoding="utf-8") as f:
         videogames = json.load(f)
+
+    if os.path.exists(topSellersFile):
+        df = pd.read_csv(topSellersFile)
+    else:
+        df = pd.DataFrame(columns=["date"] + [str(i) for i in range(1, 101)])
 
     defaultParameters = {
         "filter": "globaltopsellers",
@@ -58,6 +66,8 @@ def updateVideogames() -> None:
         "page": None,  # Page is used to go through different parts of the ranking. Each page contains 25 results
         "json": 1,
     }
+
+    dailyTopSellers = []
 
     for pageNum in range(1, 5):
 
@@ -78,6 +88,7 @@ def updateVideogames() -> None:
 
                 # Save the appid in the videogame json for later use
                 videogames[name] = int(appid)
+                dailyTopSellers.append(appid)
 
             except Exception as e:
                 print(f"Failed to extract appid: {e}")
@@ -90,6 +101,15 @@ def updateVideogames() -> None:
     with open(videogamesFile, "w", encoding="utf-8") as f:
         json.dump(videogames, f, indent=2, ensure_ascii=False)
         f.write("\n")
+
+    # Save the daily top sellers
+    today = datetime.now().date()
+    newRow = {"date": today}
+    for i, appid in enumerate(dailyTopSellers, start=1):
+        newRow[str(i)] = appid
+
+    df.loc[len(df)] = newRow
+    df.to_csv(topSellersFile, index=False)
 
 
 def fetchReviews(id: int, videogame: str, forceRefresh: bool = False) -> None:
