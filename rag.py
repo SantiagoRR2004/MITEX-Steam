@@ -100,7 +100,11 @@ def rrf(
     Returns:
         - set: A set of videogame names that are relevant to the query based on the RRF ranking.
     """
-    chroma_docs = COLLECTION.get()[databaseName]
+    collectionData = COLLECTION.get()
+    chroma_docs = collectionData["documents"]
+    chroma_ids = collectionData["ids"]
+    id_to_index = {doc_id: index for index, doc_id in enumerate(chroma_ids)}
+
     tokenized = [d.lower().split() for d in chroma_docs]
     bm25 = BM25Okapi(tokenized)
 
@@ -124,7 +128,7 @@ def rrf(
         rrf[doc_id] += 1 / (k + r + 1)
 
     for r, doc_id in enumerate(sem_ids):
-        rrf[int(doc_id)] += 1 / (k + r + 1)
+        rrf[id_to_index[doc_id]] += 1 / (k + r + 1)
 
     # List of tuples (doc_id, score) sorted by score in descending order
     top = sorted(enumerate(rrf), key=lambda x: x[1], reverse=True)
@@ -133,7 +137,7 @@ def rrf(
 
     while len(foundVideogames) < nResults and top:
         docID, _ = top.pop(0)
-        m = COLLECTION.get(ids=[str(docID)])
+        m = COLLECTION.get(ids=[chroma_ids[docID]])
         foundVideogames.add(m["metadatas"][0]["videogame"])
 
-    return top
+    return foundVideogames
