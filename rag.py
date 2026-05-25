@@ -1,8 +1,10 @@
 from rank_bm25 import BM25Okapi
+import dataHandling
 import chromadb
 import hashlib
 import models
 import os
+import json
 
 databaseName = "videogames"
 
@@ -49,6 +51,8 @@ def addReviewToCollection(reviews: list[str], videogame: str, reviewType: str) -
 
     Returns:
         - None
+
+    Título: [Nombre] | Género: [Géneros]
     """
     newReviews = []
     reviewIds = []
@@ -82,6 +86,128 @@ def addReviewToCollection(reviews: list[str], videogame: str, reviewType: str) -
             metadatas=newMetadata,
             ids=reviewIds,
         )
+
+
+def addDocsToCollection(forceRefresh: bool = False) -> None:
+    """
+    Add documents to the ChromaDB collection.
+
+    Args:
+        - forceRefresh (bool): Whether to force refresh the data. Default is False.
+            Takes a long time if set to True.
+
+    Returns:
+        - None
+    Descripción: [La describción corta (podemos coger la versión larga pero habría que limpiar el html]
+    Resumen Reseñas Positivas: []
+    Resumen Reseñas Negativas: []
+    Tópicos asociados: [Tópico X (peso %), Tópico Y (peso %)]
+    Y viendo el json podemos añadirle el precio, pegi y plataformas jugables
+    """
+    currentDirectory = os.path.dirname(os.path.abspath(__file__))
+    reviewsFiles = dataHandling.obtainReviewStructure(
+        os.path.join(currentDirectory, "summaryData")
+    )
+    videogames_info = os.path.join(currentDirectory, "rawData")
+
+    # Load topic structures
+    gt = json.load(
+        open(
+            os.path.join(currentDirectory, "topicsData", "gameTopics.json"),
+            "r",
+            encoding="utf-8",
+        )
+    )
+    topics_meta, games_to_topics = gt["topics"], gt["games"]
+
+    newDocuments = []
+    newIds = []
+    newMetadatas = []
+
+    for file in filter(lambda f: f.endswith("Info.json"), os.listdir(videogames_info)):
+        info = json.load(
+            open(os.path.join(videogames_info, file), "r", encoding="utf-8")
+        )
+        v_game = info["name"]
+        if v_game not in reviewsFiles:
+            continue
+        reviewsPath = reviewsFiles[v_game]
+        reviews = {}
+        for reviewType, path in reviewsPath.items():
+            summary = json.load(open(path, "r", encoding="utf-8"))
+            reviews[reviewType] = "\n".join(f"- {r.strip()}" for r in summary)
+
+        pos = reviews["positive"]
+        neg = reviews["negative"]
+        desc = info["short_description"]
+        plat_data = info.get("platforms", {})
+        plats = ", ".join([k.capitalize() for k, v in plat_data.items() if v])
+        pegi = info.get("ratings", {}).get("pegi", {}).get("rating", "RP")
+        genres_list = info.get("genres", [])
+        genres = ", ".join([g["description"] for g in genres_list])
+
+        # get price and transform it to float if possible
+        price_overview = info.get("price_overview")
+        if price_overview:
+            price_val = float(price_overview.get("final", 0)) / 100.0
+        else:
+            price_val = 0.0
+
+        docID = hashlib.sha256(v_game.encode()).hexdigest()
+
+        if not forceRefresh:
+            existing = COLLECTION.get(ids=[docID])
+
+            if existing and existing["ids"]:
+                continue
+
+        sorted_t = sorted(
+            games_to_topics.get(v_game, {}).items(),
+            key=lambda x: x[1].get("percentage", 0),
+            reverse=True,
+        )
+        top_str = "\n".join(
+            f"- Theme: {topics_meta.get(str(tid), {})['title']} Description: {topics_meta.get(str(tid), {})['description']} ({d.get('percentage', 0)}%)"
+            for tid, d in games_to_topics.get(v_game, {}).items()
+        )
+
+        document = (
+            f"Title: {v_game} | Genres: {genres}\n"
+            f"Description: {desc}\n\n"
+            f"Positive Reviews Summary:\n{pos}\n\n"
+            f"Negative Reviews Summary:\n{neg}\n\n"
+            f"Associated Topics:\n{top_str or '- None.'}"
+        )
+
+        metadata = {
+            "videogame": v_game,
+            "type": "game_summary",
+            "platforms": plats,
+            "pegi": str(pegi),
+            "price": price_val,
+            "genres": genres,
+        }
+
+        newDocuments.append(document)
+        newIds.append(docID)
+        newMetadatas.append(metadata)
+    if newDocuments:
+        embeddings = models.EMBEDDING_MODEL.encode(newDocuments).tolist()
+
+        if forceRefresh:
+            COLLECTION.upsert(
+                embeddings=embeddings,
+                documents=newDocuments,
+                metadatas=newMetadatas,
+                ids=newIds,
+            )
+        else:
+            COLLECTION.add(
+                embeddings=embeddings,
+                documents=newDocuments,
+                metadatas=newMetadatas,
+                ids=newIds,
+            )
 
 
 def rrf(
@@ -141,3 +267,7 @@ def rrf(
         foundVideogames.add(m["metadatas"][0]["videogame"])
 
     return foundVideogames
+
+
+if __name__ == "__main__":
+    addDocsToCollection(forceRefresh=True)

@@ -5,7 +5,6 @@ import dataHandling
 import models
 import json
 import tqdm
-import rag
 import os
 
 
@@ -73,10 +72,6 @@ def extractiveSummaryFile(
 
     # Save output to JSON file
     results = [sentences[index] for index, score in topSentences]
-
-    rag.addReviewToCollection(
-        reviews=results, videogame=videogame, reviewType=reviewType
-    )
 
     with open(
         outputPath,

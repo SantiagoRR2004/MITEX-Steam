@@ -2,6 +2,8 @@ import dataAcquisition
 import dataHandling
 import topicModeling
 import extractiveSummary
+import topicModeling
+import rag
 import LLMManager
 import decoders
 import models
@@ -25,9 +27,9 @@ def updateData(forceRefresh=False):
     dataAcquisition.updateVideogames()
     dataAcquisition.getAllGames(forceRefresh=forceRefresh)
     dataHandling.onlyEnglish(forceRefresh=forceRefresh)
-    if forceRefresh:
-        topicModeling.basicTopicModeling()
+    topicModeling.completeTopicModelingPipeline(forceRefresh=forceRefresh)
     extractiveSummary.extractiveSummary(forceRefresh=forceRefresh)
+    rag.addDocsToCollection(forceRefresh=forceRefresh)
 
 
 class Orchestrator:
