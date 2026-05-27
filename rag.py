@@ -106,9 +106,9 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
     """
     currentDirectory = os.path.dirname(os.path.abspath(__file__))
     reviewsFiles = dataHandling.obtainReviewStructure(
-        os.path.join(currentDirectory, "summaryData")
+        os.path.join(currentDirectory, "summaryData"), fileEnding=".json"
     )
-    videogames_info = os.path.join(currentDirectory, "rawData")
+    videogames_info = os.path.join(currentDirectory, "cleanData")
 
     # Load topic structures
     gt = json.load(
@@ -128,9 +128,11 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
         info = json.load(
             open(os.path.join(videogames_info, file), "r", encoding="utf-8")
         )
+
         v_game = info["name"]
         if v_game not in reviewsFiles:
             continue
+
         reviewsPath = reviewsFiles[v_game]
         reviews = {}
         for reviewType, path in reviewsPath.items():
@@ -139,19 +141,6 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
 
         pos = reviews["positive"]
         neg = reviews["negative"]
-        desc = info["short_description"]
-        plat_data = info.get("platforms", {})
-        plats = ", ".join([k.capitalize() for k, v in plat_data.items() if v])
-        pegi = info.get("ratings", {}).get("pegi", {}).get("rating", "RP")
-        genres_list = info.get("genres", [])
-        genres = ", ".join([g["description"] for g in genres_list])
-
-        # get price and transform it to float if possible
-        price_overview = info.get("price_overview")
-        if price_overview:
-            price_val = float(price_overview.get("final", 0)) / 100.0
-        else:
-            price_val = 0.0
 
         docID = hashlib.sha256(v_game.encode()).hexdigest()
 
@@ -172,8 +161,8 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
         )
 
         document = (
-            f"Title: {v_game} | Genres: {genres}\n"
-            f"Description: {desc}\n\n"
+            f"Title: {v_game} | Genres: {info['genres']}\n"
+            f"Description: {info['description']}\n\n"
             f"Positive Reviews Summary:\n{pos}\n\n"
             f"Negative Reviews Summary:\n{neg}\n\n"
             f"Associated Topics:\n{top_str or '- None.'}"
@@ -182,10 +171,10 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
         metadata = {
             "videogame": v_game,
             "type": "game_summary",
-            "platforms": plats,
-            "pegi": str(pegi),
-            "price": price_val,
-            "genres": genres,
+            "platforms": info["platforms"],
+            "pegi": str(info["pegi"]),
+            "price": info["price"],
+            "genres": info["genres"],
         }
 
         newDocuments.append(document)

@@ -8,3 +8,4 @@ tqdm
 python-dotenv
 chromadb
 rank_bm25
+gensim
