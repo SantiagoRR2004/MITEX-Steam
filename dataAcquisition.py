@@ -95,7 +95,7 @@ def updateVideogames() -> None:
                 item["appid"] = None
 
     # Sort by name
-    videogames = dict(sorted(videogames.items(), key=lambda x: x[0]))
+    videogames = dict(sorted(videogames.items(), key=lambda x: x[0].lower()))
 
     # Save the search results
     with open(videogamesFile, "w", encoding="utf-8") as f:
