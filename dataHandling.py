@@ -57,6 +57,38 @@ def cleanFile(inputPath: str, outputPath: str, videogame: str, reviewType: str) 
     return {f"{videogame} {reviewType.capitalize()}": differentLanguages}
 
 
+def keepRelevantInfo(inputPath: str, outputPath: str) -> None:
+    """
+    Extracts and keeps only the relevant information from the input JSON
+    file and writes it to the output JSON file.
+
+    Args:
+        - inputPath (str): The path to the input JSON file containing the video game information.
+        - outputPath (str): The path to the output JSON file where the relevant information will
+            be written.
+
+    Returns:
+        - None
+    """
+    with open(inputPath, "r", encoding="utf-8") as infile:
+        info = json.load(infile)
+
+    relevantInfo = {
+        "name": info["name"],
+        "description": info["short_description"],
+        "platforms": ", ".join(
+            [k.capitalize() for k, v in info.get("platforms", {}).items() if v]
+        ),
+        "pegi": ((info.get("ratings") or {}).get("pegi") or {}).get("rating", "RP"),
+        "genres": ", ".join([g["description"] for g in info.get("genres", [])]),
+        "price": float(info.get("price_overview", {}).get("final", 0)) / 100.0,
+    }
+
+    with open(outputPath, "w", encoding="utf-8") as outfile:
+        json.dump(relevantInfo, outfile, ensure_ascii=False, indent=2)
+        outfile.write("\n")
+
+
 def obtainPreviousLanguageLog(videogame: str, reviewType: str) -> dict:
     """
     Obtains the language log for a given video game and review type from the existing language log file.
@@ -85,12 +117,13 @@ def obtainPreviousLanguageLog(videogame: str, reviewType: str) -> dict:
     return {fullName: languageLog.get(fullName, {})}
 
 
-def obtainReviewStructure(folderPath: str) -> dict:
+def obtainReviewStructure(folderPath: str, fileEnding: str = ".jsonl") -> dict:
     """
-    Scans the folder for JSONL files containing positive and negative reviews of video games.
+    Scans the folder for files containing positive and negative reviews of video games.
 
     Args:
         - folderPath (str): The path to the folder containing the review files.
+        - fileEnding (str): The ending of the review files to scan for.
 
     Returns:
         - dict: A dictionary mapping each video game name to the file paths of its positive and negative reviews.
@@ -98,15 +131,15 @@ def obtainReviewStructure(folderPath: str) -> dict:
     reviewFiles = {}
 
     for filename in os.listdir(folderPath):
-        if filename.endswith(".jsonl"):
+        if filename.endswith(fileEnding):
 
-            if filename.endswith("Positive.jsonl"):
+            if filename.endswith(f"Positive{fileEnding}"):
                 reviewType = "positive"
-                name = filename[: -len("Positive.jsonl")]
+                name = filename[: -len(f"Positive{fileEnding}")]
 
-            elif filename.endswith("Negative.jsonl"):
+            elif filename.endswith(f"Negative{fileEnding}"):
                 reviewType = "negative"
-                name = filename[: -len("Negative.jsonl")]
+                name = filename[: -len(f"Negative{fileEnding}")]
 
             else:
                 print(f"Unexpected file format: {filename}")
@@ -119,9 +152,10 @@ def obtainReviewStructure(folderPath: str) -> dict:
     return reviewFiles
 
 
-def onlyEnglish(forceRefresh: bool = False) -> None:
+def cleanData(forceRefresh: bool = False) -> None:
     """
-    Remove the reviews that are not in English
+    Remove the reviews that are not in English and
+    only keep the information that we need from each game.
 
     Args:
         - forceRefresh (bool): Whether to refresh the cleaned data even if it already exists.
@@ -142,6 +176,11 @@ def onlyEnglish(forceRefresh: bool = False) -> None:
     with ProcessPoolExecutor() as executor:
 
         for game in reviewPaths.keys():
+
+            keepRelevantInfo(
+                inputPath=os.path.join(currentDirectory, "rawData", f"{game}Info.json"),
+                outputPath=os.path.join(cleanDataFolder, f"{game}Info.json"),
+            )
 
             for t in reviewPaths[game].keys():
                 inputPath = reviewPaths[game][t]
@@ -187,4 +226,4 @@ def onlyEnglish(forceRefresh: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    onlyEnglish()
+    cleanData()

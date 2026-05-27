@@ -26,7 +26,7 @@ def updateData(forceRefresh=False):
     """
     dataAcquisition.updateVideogames()
     dataAcquisition.getAllGames(forceRefresh=forceRefresh)
-    dataHandling.onlyEnglish(forceRefresh=forceRefresh)
+    dataHandling.cleanData(forceRefresh=forceRefresh)
     topicModeling.completeTopicModelingPipeline(forceRefresh=forceRefresh)
     extractiveSummary.extractiveSummary(forceRefresh=forceRefresh)
     rag.addDocsToCollection(forceRefresh=forceRefresh)
