@@ -8,3 +8,4 @@ topicsData/
 summaryData/
 db/
 completeExecutions.json
+.env*
