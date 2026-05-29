@@ -32,7 +32,7 @@ Las reseñas se guardan con el nombre del juego más `Positive.jsonl` para las p
 
 En esta parte del pipeline se limpian los datos obtenidos en la parte anterior. Se guardan en la carpeta [`cleanData`](../cleanData/). Para cada juego, se crea un nuevo fichero con el nombre del juego más `Info.json`que contiene la información general del juego que se va a usar en el rag. Elimina datos redundantes y solo se queda con 6 campos clave: name, description, platforms (Windows, Linux o Mac), pegi, genres y price.
 
-En cuanto a las reseñas, el script abre un `ProcessPoolExecutor` para poder procesarlas en paralelo con varios procesadores de la cpu. Para cada reseña, se eliminan las que no están en inglés, se eliminan los saltos de línea y se eliminan las reseñas que no tienen texto. Se guardan en un nuevo fichero con el nombre del juego más `Negative.jsonl` o  `Positive.jsonl`. Si en el archivo no queda reseña en inglés, se borra.
+En cuanto a las reseñas, el script abre un `ProcessPoolExecutor` para poder procesarlas en paralelo con varios procesadores de la cpu. Para cada reseña, se eliminan las que no están en inglés, se eliminan los saltos de línea y se eliminan las reseñas que no tienen texto. Se guardan en un nuevo fichero con el nombre del juego más `Negative.jsonl` o `Positive.jsonl`. Si en el archivo no queda reseña en inglés, se borra.
 
 Además, con el fin de evitar repetir todo el proceso al tener nuevos juegos, se guarda un fichero llamado `languageLog.json` que contiene el número de reseñas que no están en inglés para cada juego. Esto para poder recuperar el conteo de idiomas que ya se había calculado en ejecuciones anteriores.
 
@@ -42,30 +42,33 @@ En esta fase del pipeline agrupamos las reseñas limpias en diferentes tópicos 
 
 ### Extracción de tópicos y clustering
 
-El script lee todos los documentos disponibles en la carpeta `cleanData`. Para evitar que palabras genéricas del ámbito de los videojuegos contaminen los resultados, se aplica un filtro exhaustivo que combina las *stopwords* en inglés de `NLTK` junto con una lista personalizada de términos comunes (como *game*, *gameplay*, *play*, *fun* o *story*).
+El script lee todos los documentos disponibles en la carpeta `cleanData`. Para evitar que palabras genéricas del ámbito de los videojuegos contaminen los resultados, se aplica un filtro exhaustivo que combina las _stopwords_ en inglés de `NLTK` junto con una lista personalizada de términos comunes (como _game_, _gameplay_, _play_, _fun_ o _story_).
 
 El proceso de modelado sigue los siguientes pasos secuenciales:
+
 1. **Reducción de dimensionalidad:** Se utiliza `UMAP` para proyectar los vectores de las reseñas en un espacio de 5 dimensiones basándose en la similitud del coseno.
 2. **Clustering:** El algoritmo `HDBSCAN` identifica los clústeres de reseñas compartidas, exigiendo un tamaño mínimo de 80 reseñas por grupo.
 3. **Optimización de palabras clave:** Se aplica `MaximalMarginalRelevance (MMR)` con una diversidad del 0.3 para asegurar que las palabras que describen cada tema no sean redundantes entre sí.
 4. **Reducción de Outliers:** Aquellas reseñas marcadas inicialmente como ruido (clúster `-1`) se reasignan a los temas principales mediante una estrategia basada en `c-TF-IDF`, recalculando después las palabras clave para mantener la precisión. Siempre se mantiene un umbral de 0.05 para evitar asignaciones forzadas de reseñas que realmente no encajan en ningún tema.
 
 Durante la ejecución, se calcula y muestra la **coherencia del modelo ($C_v$)** utilizando `Gensim` para evaluar matemáticamente la calidad semántica de los grupos generados. Esto se hace antes del paso de reducción de outliers y después para mostrar la mejora obtenida. Además, se muestra el porcentaje de reseñas que quedan como outliers antes y después de la reasignación. Este es el resultado:
+
 ```Tópicos: 24 | Outliers: 41.22% | Coherencia C_v: 0.4921
 Tópicos: 24 | Outliers: 17.04% | Coherencia C_v: 0.5990
 ```
 
 ### Enriquecimiento con Modelos de Lenguaje (LLM)
 
-Una vez definidos los clústeres con sus palabras clave y guardados en el archivo [`videogameClusters.json`](../topicsData/videogameClusters.json), el script interactúa con un modelo de lenguaje local gestionado por `LLMManager`. 
+Una vez definidos los clústeres con sus palabras clave y guardados en el archivo [`videogameClusters.json`](../topicsData/videogameClusters.json), el script interactúa con un modelo de lenguaje local gestionado por `LLMManager`.
 
 El LLM analiza de forma automática las palabras clave de cada clúster y genera una estructura JSON formateada mediante restricciones de tokens (`TokenSequenceConstraint`). De esta manera, se añade a cada tópico:
-* **`name_topic`:** Un título corto y descriptivo (de 3 a 5 palabras) que resume la temática.
-* **`description`:** Una frase explicativa orientada a lo que este tema significa desde la perspectiva de un jugador o desarrollador.
+
+- **`name_topic`:** Un título corto y descriptivo (de 3 a 5 palabras) que resume la temática.
+- **`description`:** Una frase explicativa orientada a lo que este tema significa desde la perspectiva de un jugador o desarrollador.
 
 ### Estructuración de datos para el RAG
 
-Finalmente, el pipeline transforma la estructura orientada a clústeres en una vista centrada en los videojuegos mediante la función `create_game_centric_json`. El resultado se almacena en el archivo [`gameTopics.json`](../topicsData/gameTopics.json). 
+Finalmente, el pipeline transforma la estructura orientada a clústeres en una vista centrada en los videojuegos mediante la función `create_game_centric_json`. El resultado se almacena en el archivo [`gameTopics.json`](../topicsData/gameTopics.json).
 
 Este archivo final organiza la información en dos grandes bloques: una lista detallada de los tópicos enriquecidos por el LLM y un mapeo por cada videojuego, indicando en qué porcentaje y volumen aparecen dichos temas en sus reseñas de Steam (filtrando únicamente aquellos juegos que representen al menos el 2.0% del total del clúster). Esto permite al RAG cruzar de manera eficiente los metadatos generales del juego con el contexto semántico de la opinión de su comunidad.
 
@@ -81,4 +84,4 @@ El pipeline incluye una fase de resumen extractivo basado en grafos que seleccio
 
 Primero, el tokenizador de `NLTK` divide las reseñas en frases individuales, que luego se convierten en vectores densos mediante un modelo de embeddings (`models.EMBEDDING_MODEL`). Utilizando `NetworkX`, se construye un grafo no dirigido donde los nodos son las frases y las aristas representan la similitud del coseno entre ellas, descartando con un umbral de `0.3` cualquier conexión débil o ruidosa.
 
-Para que el resumen priorice las opiniones más valiosas, el algoritmo ejecuta un PageRank Personalizado utilizando las puntuaciones de utilidad (*scores*) de Steam. Además, para evitar que las reseñas largas dominen el grafo por el simple hecho de tener más texto, se aplica una amortiguación logarítmica dividiendo la puntuación de cada frase entre uno más el logaritmo del total de frases de su review. Así, el sistema equilibra de forma justa el peso de los análisis cortos y los detallados, seleccionando las 5 frases con mayor centralidad y guardándolas en archivos como `Half-LifePositive.json`.
+Para que el resumen priorice las opiniones más valiosas, el algoritmo ejecuta un PageRank Personalizado utilizando las puntuaciones de utilidad (_scores_) de Steam. Además, para evitar que las reseñas largas dominen el grafo por el simple hecho de tener más texto, se aplica una amortiguación logarítmica dividiendo la puntuación de cada frase entre uno más el logaritmo del total de frases de su review. Así, el sistema equilibra de forma justa el peso de los análisis cortos y los detallados, seleccionando las 5 frases con mayor centralidad y guardándolas en archivos como `Half-LifePositive.json`.
