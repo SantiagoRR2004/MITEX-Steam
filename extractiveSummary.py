@@ -1,5 +1,6 @@
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.tokenize import sent_tokenize
+import math
 import networkx as nx
 import dataHandling
 import models
@@ -33,6 +34,9 @@ def extractiveSummaryFile(
 
     with open(inputPath, "r", encoding="utf-8") as f:
         for line in f:
+            data = json.loads(line)
+            review = data["review"]
+            reviewScore = data["score"]
             review = eval(line)["review"]
 
             newSentences = [
@@ -40,13 +44,12 @@ def extractiveSummaryFile(
                 for sentence in sent_tokenize(review, language="english")
                 if sentence.strip()
             ]
-
+            num_sentences = len(newSentences)
+            distributed_scores = reviewScore / (1 + math.log(num_sentences))
+            start_idx = len(sentences)
             sentences.extend(newSentences)
             personalization.update(
-                {
-                    len(sentences) - len(newSentences) + i: eval(line)["score"]
-                    for i in range(len(newSentences))
-                }
+                {start_idx + i: distributed_scores for i in range(num_sentences)}
             )
 
     # Build sentence embeddings and pairwise cosine similarity matrix
