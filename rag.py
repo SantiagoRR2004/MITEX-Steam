@@ -139,8 +139,8 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
             summary = json.load(open(path, "r", encoding="utf-8"))
             reviews[reviewType] = "\n".join(f"- {r.strip()}" for r in summary)
 
-        pos = reviews["positive"]
-        neg = reviews["negative"]
+        pos = reviews.get("positive", "No positive reviews available.")
+        neg = reviews.get("negative", "No negative reviews available.")
 
         docID = hashlib.sha256(v_game.encode()).hexdigest()
 
@@ -150,11 +150,6 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
             if existing and existing["ids"]:
                 continue
 
-        sorted_t = sorted(
-            games_to_topics.get(v_game, {}).items(),
-            key=lambda x: x[1].get("percentage", 0),
-            reverse=True,
-        )
         top_str = "\n".join(
             f"- Theme: {topics_meta.get(str(tid), {})['title']} Description: {topics_meta.get(str(tid), {})['description']} ({d.get('percentage', 0)}%)"
             for tid, d in games_to_topics.get(v_game, {}).items()

@@ -46,9 +46,9 @@ def evaluate_topic_models(model: bertopic.BERTopic, docs: list, pred: list) -> N
     """
     Evaluate the result of a topic model
     """
-    tokens = [str(doc).split() for doc in docs]
+    analyzer = model.vectorizer_model.build_analyzer()
+    tokens = [analyzer(str(doc)) for doc in docs]
     dictionary = corpora.Dictionary(tokens)
-    corpus = [dictionary.doc2bow(text) for text in tokens]
     # Extract topic words for coherence evaluation
     topics = model.get_topic_info()
     topic_words = []
@@ -91,7 +91,7 @@ def basicTopicModeling() -> None:
         - None
     """
     df = get_docs()
-    # min_df=5 to ignore words that appear in less than 5 reviews
+
     gaming_stopwords = stopwords.words("english") + [
         "game",
         "games",
@@ -127,7 +127,7 @@ def basicTopicModeling() -> None:
     ]
     # min_df=5 to ignore words that appear in less than 5 reviews
     vectorizerModel = CountVectorizer(
-        stop_words=gaming_stopwords, min_df=5, max_df=0.6, ngram_range=(1, 2)
+        stop_words=gaming_stopwords, min_df=5, max_df=0.8, ngram_range=(1, 2)
     )
     representation_model = MaximalMarginalRelevance(diversity=0.3)
 
@@ -158,13 +158,13 @@ def basicTopicModeling() -> None:
     )
 
     docs = df["review"].tolist()
-    pred, prob = model.fit_transform(docs)
+    pred, _ = model.fit_transform(docs)
 
     evaluate_topic_models(model, docs, pred)
 
     new_topics = model.reduce_outliers(docs, pred, strategy="c-tf-idf", threshold=0.05)
 
-    model.update_topics(docs, topics=new_topics)
+    model.update_topics(docs, topics=new_topics, vectorizer_model=vectorizerModel)
     pred = new_topics
 
     evaluate_topic_models(model, docs, pred)

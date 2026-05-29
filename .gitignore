@@ -4,7 +4,7 @@ __pycache__
 rawData/
 cleanData/
 languageLog.json
-videogameClusters.json
+topicsData/
 summaryData/
 db/
 completeExecutions.json
