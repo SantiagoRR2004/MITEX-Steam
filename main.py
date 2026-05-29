@@ -26,9 +26,13 @@ def updateData(forceRefresh=False):
     """
     dataAcquisition.updateVideogames()
     dataAcquisition.getAllGames(forceRefresh=forceRefresh)
+    print("Cleaning")
     dataHandling.cleanData(forceRefresh=forceRefresh)
+    print("Topic modeling")
     topicModeling.completeTopicModelingPipeline(forceRefresh=forceRefresh)
+    print("Extractive summarization")
     extractiveSummary.extractiveSummary(forceRefresh=forceRefresh)
+    print("Adding documents to collection")
     rag.addDocsToCollection(forceRefresh=forceRefresh)
 
 
@@ -49,7 +53,15 @@ class Orchestrator:
 
         responseJson = self.node1(q)
 
-        finalOutput = self.node2(q, [])
+        if responseJson["Action"] == "rag":
+            # Retrieve relevant documents from the collection
+            results = list(rag.rrf(q, nResults=3))
+            self.completeExecution["Retrieved Documents"] = results
+
+            # Pass the retrieved documents to node 2
+            finalOutput = self.node2(q, results)
+        else:
+            finalOutput = self.node2(q, [])
 
         # Save the complete execution log
         if os.path.exists(logFile):
@@ -77,7 +89,9 @@ class Orchestrator:
             - dict: A dictionary containing the thought process, the action to take.
         """
         systemPrompt = (
-            "You are the brain of a multi-agent system. Your only function is to classify the user's query.\n\n"
+            "You are the brain of a multi-agent system. Your only function is to classify the user's query. You have two actions available:\n"
+            " - 'rag': If the user's query is related to videogames and you think that retrieving relevant documents from the collection would help answer the query, choose this action.\n"
+            " - 'nothing': If the user's query is not related to videogames or you think that retrieving documents would not help answer the query, choose this action. \n\n"
             "REQUIRED STRUCTURE in JSON format:\n"
             '{"Thinking": "[Explain here why you choose the tool.]", '
             '"Action": "[rag or nothing]" '
@@ -146,18 +160,14 @@ class Orchestrator:
                 [f"Document {i+1}:\n{doc}" for i, doc in enumerate(documents)]
             )
             self.completeExecution["Node 2 Retrieved Documents"] = documentsText
-            messages.append(
-                {
-                    "role": "system",
-                    "content": f"The following documents are relevant to the user's query:\n\n{documentsText}",
-                }
-            )
+            systemPrompt += f"\n\nThe following documents are relevant to the user's query:\n\n{documentsText}"
 
+        messages = [{"role": "system", "content": systemPrompt}]
         messages.append({"role": "user", "content": q})
 
         # Use the model
         m = LLMManager.LLMManager(decoders.SamplingDecoder())
-        finalResponse = m.processPrompt(messages, maxTokens=100)
+        finalResponse = m.processPrompt(messages, maxTokens=1000)
         response = m.decodeTokens(finalResponse)
 
         self.completeExecution["Node 2 Output"] = response
@@ -165,12 +175,13 @@ class Orchestrator:
 
 
 if __name__ == "__main__":
-    updateData()
+    # updateData(False)
 
     currentDirectory = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(currentDirectory, "queries.json"), "r") as f:
         queries = json.load(f)
 
-    q = random.choice(queries)
-    print(q)
-    print(Orchestrator().main(q))
+    for q in queries:
+        print(q)
+        print(Orchestrator().main(q))
+        print("\n\n")

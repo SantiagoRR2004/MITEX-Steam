@@ -318,10 +318,47 @@ def create_game_centric_json() -> None:
             if t != "-1"
         },
     }
+
+    # Firts build an intermediate dictionary where we group by base game its positive and negative topics (and their counts and percentages)
+    intermediate = {}
+    variant_samples = {}
+
     for t, inf in clusters.items():
         if t != "-1":
             for g, data in inf.get("games", {}).items():
-                res["games"].setdefault(g, {})[t] = data
+                # Remove negative/positive suffix to get the base game name
+                base_game = g[:-9]
+
+                if g not in variant_samples and data.get("percentage", 0) > 0:
+                    variant_samples[g] = data["count"] / data["percentage"]
+
+                intermediate.setdefault(base_game, {}).setdefault(t, []).append(data)
+
+    # We also calculate the total number of reviews for each base game (summing the counts of its variants) to be able to calculate the final percentage in the next step
+    base_totals = {}
+    for g, ratio in variant_samples.items():
+        base_game = g[:-9]
+        base_totals[base_game] = base_totals.get(base_game, 0) + ratio
+
+    # Sum the counts for each topic of each base game and calculate the new percentage based on the total number of reviews of the base game
+    for base_game, topics in intermediate.items():
+        res["games"][base_game] = {}
+        game_ratio_total = base_totals.get(base_game, 0)
+
+        for t, data_list in topics.items():
+            total_count = sum(d["count"] for d in data_list)
+
+            if game_ratio_total > 0:
+                new_percentage = round(total_count / game_ratio_total, 2)
+            else:
+                new_percentage = 0.0
+
+            res["games"][base_game][t] = {
+                "count": total_count,
+                "percentage": new_percentage,
+            }
+
+    # Guardar el archivo JSON final resultante
     with open(
         os.path.join(os.path.dirname(path), "gameTopics.json"), "w", encoding="utf-8"
     ) as f:
@@ -339,8 +376,8 @@ def completeTopicModelingPipeline(forceRefresh=False):
     """
     if forceRefresh:
         basicTopicModeling()
-    add_descriptions_to_clusters()
-    create_game_centric_json()
+        add_descriptions_to_clusters()
+        create_game_centric_json()
 
 
 if __name__ == "__main__":

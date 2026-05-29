@@ -51,8 +51,6 @@ def addReviewToCollection(reviews: list[str], videogame: str, reviewType: str) -
 
     Returns:
         - None
-
-    Título: [Nombre] | Género: [Géneros]
     """
     newReviews = []
     reviewIds = []
@@ -98,11 +96,6 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
 
     Returns:
         - None
-    Descripción: [La describción corta (podemos coger la versión larga pero habría que limpiar el html]
-    Resumen Reseñas Positivas: []
-    Resumen Reseñas Negativas: []
-    Tópicos asociados: [Tópico X (peso %), Tópico Y (peso %)]
-    Y viendo el json podemos añadirle el precio, pegi y plataformas jugables
     """
     currentDirectory = os.path.dirname(os.path.abspath(__file__))
     reviewsFiles = dataHandling.obtainReviewStructure(
@@ -124,6 +117,8 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
     newIds = []
     newMetadatas = []
 
+    seenIds = set()
+
     for file in filter(lambda f: f.endswith("Info.json"), os.listdir(videogames_info)):
         info = json.load(
             open(os.path.join(videogames_info, file), "r", encoding="utf-8")
@@ -143,6 +138,10 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
         neg = reviews.get("negative", "No negative reviews available.")
 
         docID = hashlib.sha256(v_game.encode()).hexdigest()
+
+        if docID in seenIds:
+            continue
+        seenIds.add(docID)
 
         if not forceRefresh:
             existing = COLLECTION.get(ids=[docID])
@@ -248,7 +247,7 @@ def rrf(
     while len(foundVideogames) < nResults and top:
         docID, _ = top.pop(0)
         m = COLLECTION.get(ids=[chroma_ids[docID]])
-        foundVideogames.add(m["metadatas"][0]["videogame"])
+        foundVideogames.add(m["documents"][0])
 
     return foundVideogames
 
