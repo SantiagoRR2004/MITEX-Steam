@@ -98,9 +98,10 @@ def updateVideogames() -> None:
     videogames = dict(sorted(videogames.items(), key=lambda x: x[0].lower()))
 
     # Save the search results
-    with open(videogamesFile, "w", encoding="utf-8") as f:
-        json.dump(videogames, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    # TODO: Unfreeze
+    # with open(videogamesFile, "w", encoding="utf-8") as f:
+    #     json.dump(videogames, f, indent=2, ensure_ascii=False)
+    #     f.write("\n")
 
     # Save the daily top sellers
     today = datetime.now().date()
