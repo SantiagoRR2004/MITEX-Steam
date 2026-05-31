@@ -34,7 +34,7 @@ En esta parte del pipeline se limpian los datos obtenidos en la parte anterior. 
 
 En cuanto a las reseñas, el script abre un `ProcessPoolExecutor` para poder procesarlas en paralelo con varios procesadores de la cpu. Para cada reseña, se eliminan las que no están en inglés, se eliminan los saltos de línea y se eliminan las reseñas que no tienen texto. Se guardan en un nuevo fichero con el nombre del juego más `Negative.jsonl` o `Positive.jsonl`. Si en el archivo no queda reseña en inglés, se borra.
 
-Además, con el fin de evitar repetir todo el proceso al tener nuevos juegos, se guarda un fichero llamado `languageLog.json` que contiene el número de reseñas que no están en inglés para cada juego. Esto para poder recuperar el conteo de idiomas que ya se había calculado en ejecuciones anteriores.
+Para las reseñas se guarda un fichero llamado `languageLog.json` que contiene el número de reseñas que no están en inglés para cada juego. Se va actualizando cada vez que se añaden nuevos juegos o se vuelven a procesar los juegos existentes. Podemos ver que en la mayoría de los juegos, Steam filtra por idioma correctamente sin muchos errores.
 
 ## Modelado de temas
 
