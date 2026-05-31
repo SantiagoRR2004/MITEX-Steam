@@ -1,13 +1,12 @@
+from datetime import datetime
 import dataAcquisition
 import dataHandling
 import topicModeling
 import extractiveSummary
-import topicModeling
 import rag
 import LLMManager
 import decoders
 import models
-import random
 import torch
 import json
 import os
@@ -49,14 +48,14 @@ class Orchestrator:
         """
         currentDirectory = os.path.dirname(os.path.abspath(__file__))
         logFile = os.path.join(currentDirectory, "completeExecutions.json")
-        self.completeExecution = {}
+        self.completeExecution = {f"{datetime.now()} Query": q}
 
         responseJson = self.node1(q)
 
         if responseJson["Action"] == "rag":
             # Retrieve relevant documents from the collection
             results = list(rag.rrf(q, nResults=3))
-            self.completeExecution["Retrieved Documents"] = results
+            self.completeExecution[f"{datetime.now()} Retrieved Documents"] = results
 
             # Pass the retrieved documents to node 2
             finalOutput = self.node2(q, results)
@@ -70,7 +69,7 @@ class Orchestrator:
         else:
             logs = {}
 
-        logs[q] = self.completeExecution
+        logs[str(datetime.now())] = self.completeExecution
 
         with open(logFile, "w", encoding="utf-8") as f:
             json.dump(logs, f, indent=4, ensure_ascii=False)
@@ -98,7 +97,7 @@ class Orchestrator:
             "}\n"
         )
 
-        self.completeExecution["Node 1 Prompt"] = systemPrompt
+        self.completeExecution[f"{datetime.now()} Node 1 Prompt"] = systemPrompt
 
         messages = [
             {"role": "system", "content": systemPrompt},
@@ -132,7 +131,7 @@ class Orchestrator:
         finalText = m.decodeTokens(tokens)
         output = json.loads(finalText)
 
-        self.completeExecution["Node 1 Output"] = output
+        self.completeExecution[f"{datetime.now()} Node 1 Output"] = output
 
         return output
 
@@ -151,7 +150,7 @@ class Orchestrator:
         systemPrompt = (
             "You are a helpful assistant. Your task is to answer the user's query."
         )
-        self.completeExecution["Node 2 Prompt"] = systemPrompt
+        self.completeExecution[f"{datetime.now()} Node 2 Prompt"] = systemPrompt
 
         messages = [{"role": "system", "content": systemPrompt}]
 
@@ -159,7 +158,9 @@ class Orchestrator:
             documentsText = "\n\n".join(
                 [f"Document {i+1}:\n{doc}" for i, doc in enumerate(documents)]
             )
-            self.completeExecution["Node 2 Retrieved Documents"] = documentsText
+            self.completeExecution[f"{datetime.now()} Node 2 Retrieved Documents"] = (
+                documentsText
+            )
             systemPrompt += f"\n\nThe following documents are relevant to the user's query:\n\n{documentsText}"
 
         messages = [{"role": "system", "content": systemPrompt}]
@@ -170,7 +171,7 @@ class Orchestrator:
         finalResponse = m.processPrompt(messages, maxTokens=1000)
         response = m.decodeTokens(finalResponse)
 
-        self.completeExecution["Node 2 Output"] = response
+        self.completeExecution[f"{datetime.now()} Node 2 Output"] = response
         return response
 
 
