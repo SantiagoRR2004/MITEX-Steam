@@ -1,21 +1,21 @@
+from bertopic.representation import MaximalMarginalRelevance
 from sklearn.feature_extraction.text import CountVectorizer
+from gensim.models.coherencemodel import CoherenceModel
 from nltk.corpus import stopwords
-import torch
+import gensim.corpora as corpora
+from hdbscan import HDBSCAN
+from umap import UMAP
 import dataHandling
 import pandas as pd
+import LLMManager
 import bertopic
-from umap import UMAP
-from hdbscan import HDBSCAN
-from bertopic.representation import MaximalMarginalRelevance
-import nltk
-import json
-import os
-import gensim.corpora as corpora
-from gensim.models.coherencemodel import CoherenceModel
-
 import decoders
 import models
-import LLMManager
+import torch
+import nltk
+import json
+import tqdm
+import os
 
 nltk.download("stopwords", quiet=True)
 
@@ -155,17 +155,25 @@ def basicTopicModeling() -> None:
         hdbscan_model=hdbscan_model,
         min_topic_size=50,
         nr_topics=25,  # number of topics to reduce to
+        verbose=True,
     )
 
     docs = df["review"].tolist()
-    pred, _ = model.fit_transform(docs)
 
-    evaluate_topic_models(model, docs, pred)
+    with tqdm.tqdm(total=3, desc="Running BERTopic", unit="stage") as progress:
+        pred, _ = model.fit_transform(docs)
+        progress.update(1)
 
-    new_topics = model.reduce_outliers(docs, pred, strategy="c-tf-idf", threshold=0.05)
+        evaluate_topic_models(model, docs, pred)
 
-    model.update_topics(docs, topics=new_topics, vectorizer_model=vectorizerModel)
-    pred = new_topics
+        new_topics = model.reduce_outliers(
+            docs, pred, strategy="c-tf-idf", threshold=0.05
+        )
+        progress.update(1)
+
+        model.update_topics(docs, topics=new_topics, vectorizer_model=vectorizerModel)
+        pred = new_topics
+        progress.update(1)
 
     evaluate_topic_models(model, docs, pred)
 
@@ -174,8 +182,9 @@ def basicTopicModeling() -> None:
     keyWords = model.get_topics()
     clusters = {}
 
-    print(df.groupby("cluster").size())
-    for cluster_id, group in df.groupby("cluster"):
+    for cluster_id, group in tqdm.tqdm(
+        df.groupby("cluster"), desc="Processing clusters"
+    ):
         c_id = int(cluster_id)
         if c_id == -1:
             keywords = ["outliers"]
@@ -247,7 +256,9 @@ def add_descriptions_to_clusters():
     """
     clusters, clusters_path = get_clusters()
 
-    for cluster_id, cluster_info in clusters.items():
+    for cluster_id, cluster_info in tqdm.tqdm(
+        clusters.items(), desc="Cluster descriptions"
+    ):
         keywords = cluster_info["keywords"]
 
         if cluster_id == "-1":
