@@ -161,7 +161,7 @@ class Orchestrator:
             self.completeExecution[f"{datetime.now()} Node 2 Retrieved Documents"] = (
                 documentsText
             )
-            systemPrompt += f"\n\nThe following documents are relevant to the user's query:\n\n{documentsText}"
+            systemPrompt += f"\n\nOne of the following documents is relevant to the user's query:\n\n{documentsText}"
 
         messages = [{"role": "system", "content": systemPrompt}]
         messages.append({"role": "user", "content": q})
