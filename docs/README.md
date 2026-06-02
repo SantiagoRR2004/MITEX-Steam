@@ -110,7 +110,6 @@ Además, se añaden metadatos adicionales a cada documento, como el precio, las 
 
 Para recuperar la información de la manera más precisa posible, implementamos una estrategia de búsqueda híbrida mediante la función rrf. Este método combina los puntos fuertes de la búsqueda léxica y la semántica a través del algoritmo Reciprocal Rank Fusion. Primero, el script calcula las coincidencias exactas de términos sobre los documentos tokenizados usando un modelo BM25Okapi para obtener los 50 mejores resultados. En paralelo, se genera el embedding de la consulta y se interroga a ChromaDB para extraer los 50 resultados con mayor similitud conceptual. Ambas listas se fusionan otorgando a cada juego una puntuación basada en su posición de rango dentro de cada búsqueda, utilizando la fórmula `score = 1/(k + rank)`, donde `k` es un factor de amortiguación (en este caso, 60) que equilibra la influencia de ambos métodos. Finalmente, se ordenan los resultados combinados por su puntuación total y se devuelven los 3 juegos más relevantes.
 
-
 ## Arquitectura Multi Agente
 
 Para coordinar todo el flujo desde que el usuario introduce una consulta hasta que recibe la respuesta final, implementamos una clase Orchestrator que gestiona un sistema multi-agente basado en nodos secuenciales y guarda un registro completo de cada ejecución en [`completeExecutionLog.json`](../completeExecutionLog.json). En este json se pueden ver los outputs de cada agente, los documentos recuperados, las consultas a los LLMs y las respuestas generadas. Esto es fundamental para entender el proceso completo y detectar posibles errores o áreas de mejora.
@@ -126,4 +125,3 @@ Para garantizar que este nodo no rompa el flujo de ejecución, forzamos al model
 Una vez que el Nodo 1 determina que la consulta requiere contexto, invoca la función de búsqueda híbrida `rag.rrf` para recuperar los 3 documentos más relevantes de la colección y se añaden al historial de ejecución. Si se determinó que no era necesario el contexto, se omite esta parte y se pasa directamente al Nodo 2.
 
 Finalmente, la consulta original y los documentos recuperados (en caso de que los haya) se envían al Nodo 2. Este último componente actúa como el asistente final: concatena el texto de los documentos dentro de su prompt del sistema si la lista contiene información, procesa el contexto junto a la pregunta del usuario utilizando un decodificador de muestreo tradicional (SamplingDecoder) y genera la respuesta definitiva que se devuelve al usuario.
-
