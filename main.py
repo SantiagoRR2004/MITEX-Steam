@@ -8,6 +8,7 @@ import LLMManager
 import decoders
 import models
 import torch
+import copy
 import json
 import os
 
@@ -49,31 +50,33 @@ class Orchestrator:
         currentDirectory = os.path.dirname(os.path.abspath(__file__))
         logFile = os.path.join(currentDirectory, "completeExecutions.json")
         self.completeExecution = {f"{datetime.now()} Query": q}
+        self.completeConversation = []
 
-        responseJson = self.node1(q)
-
-        if responseJson["Action"] == "rag":
-            # Retrieve relevant documents from the collection
-            results = list(rag.rrf(q, nResults=3))
-            self.completeExecution[f"{datetime.now()} Retrieved Documents"] = results
-
-            # Pass the retrieved documents to node 2
-            finalOutput = self.node2(q, results)
-        else:
-            finalOutput = self.node2(q, [])
-
-        # Save the complete execution log
+        # Load previous logs
         if os.path.exists(logFile):
             with open(logFile, "r", encoding="utf-8") as f:
                 logs = json.load(f)
         else:
             logs = {}
-
         logs[str(datetime.now())] = self.completeExecution
 
-        with open(logFile, "w", encoding="utf-8") as f:
-            json.dump(logs, f, indent=4, ensure_ascii=False)
-            f.write("\n")
+        while q != ":q":
+
+            responseJson = self.node1(q)
+            documents = []
+
+            if responseJson["Action"] == "rag":
+                # Retrieve relevant documents from the collection
+                documents = self.node3(q)
+
+            finalOutput = self.node2(q, documents)
+
+            with open(logFile, "w", encoding="utf-8") as f:
+                json.dump(logs, f, indent=4, ensure_ascii=False)
+                f.write("\n")
+
+            print(finalOutput)
+            q = input("Enter a new query (or ':q' to quit): ")
 
         return finalOutput
 
@@ -99,10 +102,9 @@ class Orchestrator:
 
         self.completeExecution[f"{datetime.now()} Node 1 Prompt"] = systemPrompt
 
-        messages = [
-            {"role": "system", "content": systemPrompt},
-            {"role": "user", "content": userMessage},
-        ]
+        messages = copy.deepcopy(self.completeConversation)
+        messages.insert(0, {"role": "system", "content": systemPrompt})
+        messages.append({"role": "user", "content": userMessage})
 
         sequence = decoders.TokenSequenceConstraint(
             wantedText=[
@@ -152,7 +154,12 @@ class Orchestrator:
         )
         self.completeExecution[f"{datetime.now()} Node 2 Prompt"] = systemPrompt
 
-        messages = [{"role": "system", "content": systemPrompt}]
+        if getattr(self, "mainCache", None) is None:
+            messages = [{"role": "system", "content": systemPrompt}]
+            self.mainCache = None
+            self.completeConversation = []
+        else:
+            messages = []
 
         if len(documents) > 0:
             documentsText = "\n\n".join(
@@ -161,18 +168,40 @@ class Orchestrator:
             self.completeExecution[f"{datetime.now()} Node 2 Retrieved Documents"] = (
                 documentsText
             )
-            systemPrompt += f"\n\nOne of the following documents is relevant to the user's query:\n\n{documentsText}"
+            finalText = f"The following documents could relevant to the user's query:\n\n{documentsText}\n\nUser query:\n\n"
+        else:
+            finalText = ""
 
-        messages = [{"role": "system", "content": systemPrompt}]
-        messages.append({"role": "user", "content": q})
+        messages.append({"role": "user", "content": finalText + q})
+        self.completeConversation.append({"role": "user", "content": finalText + q})
 
         # Use the model
         m = LLMManager.LLMManager(decoders.SamplingDecoder())
+        m.kvCache = self.mainCache
         finalResponse = m.processPrompt(messages, maxTokens=1000)
         response = m.decodeTokens(finalResponse)
 
+        # Update the main caché
+        self.mainCache = m.kvCache
+        self.completeConversation.append({"role": "assistant", "content": response})
+
         self.completeExecution[f"{datetime.now()} Node 2 Output"] = response
         return response
+
+    def node3(self, q: str) -> list:
+        """
+        This is the RAG node that uses the query to
+        retrieve the relevant documents.
+
+        Args:
+            - q (str): The original query from the user.
+
+        Returns:
+            - list: The list of retrieved documents.
+        """
+        results = list(rag.rrf(q, nResults=3))
+        self.completeExecution[f"{datetime.now()} Retrieved Documents"] = results
+        return results
 
 
 if __name__ == "__main__":
@@ -184,5 +213,5 @@ if __name__ == "__main__":
 
     for q in queries:
         print(q)
-        print(Orchestrator().main(q))
+        Orchestrator().main(q)
         print("\n\n")

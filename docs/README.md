@@ -116,12 +116,22 @@ Para coordinar todo el flujo desde que el usuario introduce una consulta hasta q
 
 ### Nodo 1: Query Understanding
 
-El primer paso del pipeline consiste en determinar si la consulta del usuario requiere extraer contexto de nuestra base de datos vectorial o no. El Nodo 1 actúa como el cerebro clasificador del sistema utilizando un prompt del sistema estricto. Su único objetivo es analizar el mensaje y decidir entre dos acciones posibles: `rag`, si la duda está relacionada con videojuegos y necesita el contexto de ChromaDB, o `nothing`, si es una consulta genérica o ajena al dataset.
+El primer paso del pipeline consiste en determinar si la consulta del usuario requiere extraer contexto de nuestra base de datos vectorial o no. El Nodo 1 actúa como el cerebro clasificador del sistema utilizando un prompt del sistema estricto. Su único objetivo es analizar la lista de mensajes y decidir entre dos acciones posibles: `rag`, si la duda está relacionada con videojuegos y necesita el contexto de ChromaDB, o `nothing`, si es una consulta genérica o ajena al dataset.
+
+Como el usuario final puede responder y seguir hablando, este nodo tiene su prompt de sistema seguido con toda la conversación previa (incluyendo los documentos recuperados en iteraciones anteriores) para que el modelo tenga toda la información necesaria para tomar una decisión informada.
 
 Para garantizar que este nodo no rompa el flujo de ejecución, forzamos al modelo a responder exclusivamente en un formato JSON estructurado mediante una restricción de tokens (`TokenSequenceConstraint`). El JSON resultante contiene obligatoriamente un campo `Thinking` con el razonamiento del modelo y un campo `Action` restringido únicamente a las dos opciones válidas.
 
+- Si se elige `rag`, se va al [Nodo 3](#nodo-3-recuperación-de-documentos).
+
+- Si se elige `nothing`, se va al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta).
+
 ### Nodo 2: Recuperación RAG y Respuesta
 
-Una vez que el Nodo 1 determina que la consulta requiere contexto, invoca la función de búsqueda híbrida `rag.rrf` para recuperar los 3 documentos más relevantes de la colección y se añaden al historial de ejecución. Si se determinó que no era necesario el contexto, se omite esta parte y se pasa directamente al Nodo 2.
+La consulta y los documentos recuperados (en caso de que los haya) se envían al Nodo 2. Este último componente actúa como el asistente final, mantiene la conversación hasta el momento y añade la consulta del usuario con sus documentos. Utiliza un decodificador de muestreo tradicional (SamplingDecoder) y genera la respuesta que se devuelve al usuario.
 
-Finalmente, la consulta original y los documentos recuperados (en caso de que los haya) se envían al Nodo 2. Este último componente actúa como el asistente final: concatena el texto de los documentos dentro de su prompt del sistema si la lista contiene información, procesa el contexto junto a la pregunta del usuario utilizando un decodificador de muestreo tradicional (SamplingDecoder) y genera la respuesta definitiva que se devuelve al usuario.
+Si el usuario responde algo distinto de `:q`, se vuelve al [Nodo 1](#nodo-1-query-understanding).
+
+### Nodo 3: Recuperación de documentos
+
+Invoca la función de búsqueda híbrida `rag.rrf` para recuperar los 3 documentos más relevantes de la colección y se va al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta).
