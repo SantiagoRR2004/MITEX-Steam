@@ -85,3 +85,45 @@ El pipeline incluye una fase de resumen extractivo basado en grafos que seleccio
 Primero, el tokenizador de `NLTK` divide las reseñas en frases individuales, que luego se convierten en vectores densos mediante un modelo de embeddings (`models.EMBEDDING_MODEL`). Utilizando `NetworkX`, se construye un grafo no dirigido donde los nodos son las frases y las aristas representan la similitud del coseno entre ellas, descartando con un umbral de `0.3` cualquier conexión débil o ruidosa.
 
 Para que el resumen priorice las opiniones más valiosas, el algoritmo ejecuta un PageRank Personalizado utilizando las puntuaciones de utilidad (_scores_) de Steam. Además, para evitar que las reseñas largas dominen el grafo por el simple hecho de tener más texto, se aplica una amortiguación logarítmica dividiendo la puntuación de cada frase entre uno más el logaritmo del total de frases de su review. Así, el sistema equilibra de forma justa el peso de los análisis cortos y los detallados, seleccionando las 5 frases con mayor centralidad y guardándolas en archivos como `Half-LifePositive.json`.
+
+## Documentos para el RAG
+
+En esta etapa, el pipeline unifica toda la información procesada para construir el motor de búsqueda que alimentará al RAG. La función addDocsToCollection se encarga de consolidar los datos de cada videojuego, combinando la información general de `cleanData`, los resúmenes de opiniones de `summaryData` y los porcentajes de temas de `gameTopics.json`. Con este texto estructurado se genera un documento final que se convierte en vector mediante nuestro modelo de embeddings y se almacena en una colección de ChromaDB. Para identificar cada juego de forma única y evitar duplicados, se genera un identificador aplicando un hash SHA256 sobre su nombre.
+
+Por cada documento, se crea un único bloque de texto formateado de la siguiente manera:
+
+- Título: El nombre del videojuego.
+
+- Géneros: Los géneros a los que pertenece el juego.
+
+- Descripción: La descripción general del juego proveniente de STEAM.
+
+- Resumen de reseñas positivas: Las 5 frases más representativas extraídas de las opiniones positivas (o un texto por defecto si no hay).
+
+- Resumen de reseñas negativas: Las 5 frases más representativas extraídas de las opiniones negativas (o un texto por defecto si no hay).
+
+- Temas asociados: Una lista con los tópicos detectados por BERTopic extraído de las reseñas, detallando el título del tema, su descripción y el porcentaje de relevancia que tiene dentro de las reseñas de ese juego concreto.
+
+Además, se añaden metadatos adicionales a cada documento, como el precio, las plataformas disponibles y la clasificación PEGI, para enriquecer aún más la información que el RAG puede utilizar para responder preguntas específicas sobre cada videojuego.
+
+### Búsqueda Híbrida
+
+Para recuperar la información de la manera más precisa posible, implementamos una estrategia de búsqueda híbrida mediante la función rrf. Este método combina los puntos fuertes de la búsqueda léxica y la semántica a través del algoritmo Reciprocal Rank Fusion. Primero, el script calcula las coincidencias exactas de términos sobre los documentos tokenizados usando un modelo BM25Okapi para obtener los 50 mejores resultados. En paralelo, se genera el embedding de la consulta y se interroga a ChromaDB para extraer los 50 resultados con mayor similitud conceptual. Ambas listas se fusionan otorgando a cada juego una puntuación basada en su posición de rango dentro de cada búsqueda, utilizando la fórmula `score = 1/(k + rank)`, donde `k` es un factor de amortiguación (en este caso, 60) que equilibra la influencia de ambos métodos. Finalmente, se ordenan los resultados combinados por su puntuación total y se devuelven los 3 juegos más relevantes.
+
+
+## Arquitectura Multi Agente
+
+Para coordinar todo el flujo desde que el usuario introduce una consulta hasta que recibe la respuesta final, implementamos una clase Orchestrator que gestiona un sistema multi-agente basado en nodos secuenciales y guarda un registro completo de cada ejecución en [`completeExecutionLog.json`](../completeExecutionLog.json). En este json se pueden ver los outputs de cada agente, los documentos recuperados, las consultas a los LLMs y las respuestas generadas. Esto es fundamental para entender el proceso completo y detectar posibles errores o áreas de mejora.
+
+### Nodo 1: Query Understanding
+
+El primer paso del pipeline consiste en determinar si la consulta del usuario requiere extraer contexto de nuestra base de datos vectorial o no. El Nodo 1 actúa como el cerebro clasificador del sistema utilizando un prompt del sistema estricto. Su único objetivo es analizar el mensaje y decidir entre dos acciones posibles: `rag`, si la duda está relacionada con videojuegos y necesita el contexto de ChromaDB, o `nothing`, si es una consulta genérica o ajena al dataset.
+
+Para garantizar que este nodo no rompa el flujo de ejecución, forzamos al modelo a responder exclusivamente en un formato JSON estructurado mediante una restricción de tokens (`TokenSequenceConstraint`). El JSON resultante contiene obligatoriamente un campo `Thinking` con el razonamiento del modelo y un campo `Action` restringido únicamente a las dos opciones válidas.
+
+### Nodo 2: Recuperación RAG y Respuesta
+
+Una vez que el Nodo 1 determina que la consulta requiere contexto, invoca la función de búsqueda híbrida `rag.rrf` para recuperar los 3 documentos más relevantes de la colección y se añaden al historial de ejecución. Si se determinó que no era necesario el contexto, se omite esta parte y se pasa directamente al Nodo 2.
+
+Finalmente, la consulta original y los documentos recuperados (en caso de que los haya) se envían al Nodo 2. Este último componente actúa como el asistente final: concatena el texto de los documentos dentro de su prompt del sistema si la lista contiene información, procesa el contexto junto a la pregunta del usuario utilizando un decodificador de muestreo tradicional (SamplingDecoder) y genera la respuesta definitiva que se devuelve al usuario.
+
