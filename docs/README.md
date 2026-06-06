@@ -116,7 +116,13 @@ Para coordinar todo el flujo desde que el usuario introduce una consulta hasta q
 
 ### Nodo 1: Query Understanding
 
-El primer paso del pipeline consiste en determinar si la consulta del usuario requiere extraer contexto de nuestra base de datos vectorial o no. El Nodo 1 actúa como el cerebro clasificador del sistema utilizando un prompt del sistema estricto. Su único objetivo es analizar la lista de mensajes y decidir entre dos acciones posibles: `rag`, si la duda está relacionada con videojuegos y necesita el contexto de ChromaDB, o `nothing`, si es una consulta genérica o ajena al dataset.
+El primer paso del pipeline consiste en determinar si la consulta del usuario requiere extraer contexto de nuestra base de datos vectorial o no. El Nodo 1 actúa como el cerebro clasificador del sistema utilizando un prompt del sistema estricto. Su único objetivo es analizar la lista de mensajes y decidir entre varias acciones posibles:
+
+- `rag`, si la duda está relacionada con videojuegos y necesita el contexto de ChromaDB.
+
+- `nothing`, si es una consulta genérica o ajena al dataset.
+
+- `search`, si se puede buscar por el nombre del juego sin necesidad de usar el contexto de ChromaDB.
 
 Como el usuario final puede responder y seguir hablando, este nodo tiene su prompt de sistema seguido con toda la conversación previa (incluyendo los documentos recuperados en iteraciones anteriores) para que el modelo tenga toda la información necesaria para tomar una decisión informada.
 
@@ -125,6 +131,8 @@ Para garantizar que este nodo no rompa el flujo de ejecución, forzamos al model
 - Si se elige `rag`, se va al [Nodo 3](#nodo-3-recuperación-de-documentos).
 
 - Si se elige `nothing`, se va al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta).
+
+- Si se elige `search`, se va al [Nodo 4](#nodo-4-búsqueda-por-nombre-de-juego).
 
 ### Nodo 2: Recuperación RAG y Respuesta
 
@@ -135,3 +143,7 @@ Si el usuario responde algo distinto de `:q`, se vuelve al [Nodo 1](#nodo-1-quer
 ### Nodo 3: Recuperación de documentos
 
 Invoca la función de búsqueda híbrida `rag.rrf` para recuperar los 3 documentos más relevantes de la colección y se va al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta).
+
+### Nodo 4: Búsqueda por nombre de juego
+
+En este nodo primero se utiliza un LLM para analizar la conversación hasta el momento y extraer el nombre del videojuego adecuado. Una vez que se tiene el nombre, se busca la coincidencia más cercana en la lista de [`videogames.json`](../videogames.json) usando `difflib.get_close_matches`. Con la coincidencia encontrada, se genera el documento correspondiente con la función `rag.generateDocument` y se devuelve al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta) para que el asistente final pueda usarlo en su respuesta.

@@ -6,6 +6,7 @@ import extractiveSummary
 import rag
 import LLMManager
 import decoders
+import difflib
 import models
 import torch
 import copy
@@ -38,6 +39,8 @@ def updateData(forceRefresh=False):
 
 class Orchestrator:
 
+    currentDirectory = os.path.dirname(os.path.abspath(__file__))
+
     def main(self, q: str) -> str:
         """
         Execute the full consult from the user query to the final response.
@@ -69,6 +72,15 @@ class Orchestrator:
                 # Retrieve relevant documents from the collection
                 documents = self.node3(q)
 
+            elif responseJson["Action"] == "search":
+                documents = self.node4(q)
+
+            elif responseJson["Action"] == "nothing":
+                pass
+
+            else:
+                raise ValueError(f"Invalid action: {responseJson['Action']}")
+
             finalOutput = self.node2(q, documents)
 
             with open(logFile, "w", encoding="utf-8") as f:
@@ -94,9 +106,10 @@ class Orchestrator:
             "You are the brain of a multi-agent system. Your only function is to classify the user's query. You have two actions available:\n"
             " - 'rag': If the user's query is related to videogames and you think that retrieving relevant documents from the collection would help answer the query, choose this action.\n"
             " - 'nothing': If the user's query is not related to videogames or you think that retrieving documents would not help answer the query, choose this action. \n\n"
+            " - 'search': If the user's query is related to videogames and you think that retrieving the specific document by stating the real name of the game, choose this action. \n\n"
             "REQUIRED STRUCTURE in JSON format:\n"
             '{"Thinking": "[Explain here why you choose the tool.]", '
-            '"Action": "[rag or nothing]" '
+            '"Action": "[rag or nothing or search]" '
             "}\n"
         )
 
@@ -112,7 +125,7 @@ class Orchestrator:
                 decoders.EndingText('"', models.GEN_TOKENIZER),
                 ', "Action": "',
                 decoders.MultipleTokenOptions(
-                    ["nothing", "rag"], tokenizer=models.GEN_TOKENIZER
+                    ["nothing", "rag", "search"], tokenizer=models.GEN_TOKENIZER
                 ),
                 '"}',
             ],
@@ -202,6 +215,73 @@ class Orchestrator:
         results = list(rag.rrf(q, nResults=3))
         self.completeExecution[f"{datetime.now()} Retrieved Documents"] = results
         return results
+
+    def node4(self, q: str) -> list:
+        """
+        This is the search node that asks the model for the name of the game
+        and then retrieves the relevant document.
+
+        Args:
+            - q (str): The original query from the user.
+
+        Returns:
+            - list: The list with the retrieved document.
+        """
+        systemPrompt = (
+            "You are a helpful assistant. Your task is to identify the name of the videogame that the previous node is thinking is needed. If you are not sure about the name of the game, try to give your best guess.\n\n"
+            "REQUIRED STRUCTURE in JSON format:\n"
+            '{"Game": "[Name of the game]"}\n'
+        )
+
+        self.completeExecution[f"{datetime.now()} Node 4 Prompt"] = systemPrompt
+
+        messages = copy.deepcopy(self.completeConversation)
+
+        messages.insert(0, {"role": "system", "content": systemPrompt})
+        messages.append({"role": "user", "content": q})
+
+        sequence = decoders.TokenSequenceConstraint(
+            wantedText=[
+                '{"Game": "',
+                decoders.EndingText('"', models.GEN_TOKENIZER),
+                "}",
+            ],
+            tokenizer=models.GEN_TOKENIZER,
+        )
+
+        # Use the model
+        d = decoders.FormattedDecoder(models.GEN_TOKENIZER, sequence, jsonFormat=True)
+        m = LLMManager.LLMManager(d)
+        d.setManager(m)
+
+        # Generate the response
+        tokens = m.processPrompt(messages)
+
+        while not d.finished:
+            tokens = m.decode(torch.tensor([[tokens[-1]]]))
+
+        finalText = m.decodeTokens(tokens)
+        output = json.loads(finalText)
+
+        self.completeExecution[f"{datetime.now()} Node 4 Output"] = output
+
+        # Try to find the closest match
+        videogamesFile = os.path.join(currentDirectory, "videogames.json")
+        with open(videogamesFile, "r", encoding="utf-8") as f:
+            videogames = list(json.load(f).keys())
+
+        match = difflib.get_close_matches(
+            output["Game"], videogames, n=1, cutoff=0.6
+        )  # 60% similarity threshold
+
+        self.completeExecution[f"{datetime.now()} Node 4 Closest Match"] = match
+
+        documents = [rag.generateDocument(match[0])] if match else []
+        self.completeExecution[f"{datetime.now()} Node 4 Retrieved Document"] = (
+            documents[0]
+        )
+
+        return documents
 
 
 if __name__ == "__main__":

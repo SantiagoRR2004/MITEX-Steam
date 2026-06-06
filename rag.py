@@ -86,6 +86,94 @@ def addReviewToCollection(reviews: list[str], videogame: str, reviewType: str) -
         )
 
 
+def generateDocument(
+    videogame: str,
+    info: dict = None,
+    positiveReviews: list[str] = None,
+    negativeReviews: list[str] = None,
+    topics: dict = None,
+) -> str:
+    """
+    Generate a document for a given videogame by combining its information and reviews.
+
+    Args:
+        - videogame: The name of the videogame for which to generate the document.
+        - info: A dictionary containing the videogame's information (optional).
+        - positiveReviews: A list of positive reviews for the videogame (optional).
+        - negativeReviews: A list of negative reviews for the videogame (optional).
+        - topics: A dictionary containing the topics associated with the videogame (optional).
+
+    Returns:
+        - str: The generated document containing the videogame's information and reviews.
+    """
+    currentDirectory = os.path.dirname(os.path.abspath(__file__))
+
+    # The info
+    if info is None:
+        infoPath = os.path.join(currentDirectory, "cleanData", f"{videogame}Info.json")
+        info = json.load(open(infoPath, "r", encoding="utf-8"))
+
+    # Find positive reviews
+    if positiveReviews is None:
+        posPath = os.path.join(
+            currentDirectory, "summaryData", f"{videogame}Positive.json"
+        )
+        if os.path.exists(posPath):
+            positiveReviews = json.load(open(posPath, "r", encoding="utf-8"))
+        else:
+            positiveReviews = []
+
+    # Text for positive reviews
+    posText = (
+        "\n".join(f"- {r.strip()}" for r in positiveReviews)
+        if positiveReviews
+        else "No positive reviews available."
+    )
+
+    # Find negative reviews
+    if negativeReviews is None:
+        negPath = os.path.join(
+            currentDirectory, "summaryData", f"{videogame}Negative.json"
+        )
+        if os.path.exists(negPath):
+            negativeReviews = json.load(open(negPath, "r", encoding="utf-8"))
+        else:
+            negativeReviews = []
+
+    # Text for negative reviews
+    negText = (
+        "\n".join(f"- {r.strip()}" for r in negativeReviews)
+        if negativeReviews
+        else "No negative reviews available."
+    )
+
+    # Text for topics
+    if topics is None:
+        gtPath = os.path.join(currentDirectory, "topicsData", "gameTopics.json")
+        topics = json.load(open(gtPath, "r", encoding="utf-8"))
+
+    relevantTopics = topics["games"].get(videogame, {})
+
+    topicsDescription = []
+
+    for tid, d in relevantTopics.items():
+        topic = topics["topics"][str(tid)]
+
+        topicsDescription.append(
+            f"- Theme: {topic['title']} "
+            f"Description: {topic['description']} "
+            f" ({d.get('percentage', 0)}%)"
+        )
+
+    return (
+        f"Title: {videogame} | Genres: {info['genres']}\n"
+        f"Description: {info['description']}\n\n"
+        f"Positive Reviews Summary:\n{posText}\n\n"
+        f"Negative Reviews Summary:\n{negText}\n\n"
+        f"Associated Topics:\n{"\n".join(topicsDescription) or '- None.'}"
+    )
+
+
 def addDocsToCollection(forceRefresh: bool = False) -> None:
     """
     Add documents to the ChromaDB collection.
@@ -111,7 +199,6 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
             encoding="utf-8",
         )
     )
-    topics_meta, games_to_topics = gt["topics"], gt["games"]
 
     newDocuments = []
     newIds = []
@@ -128,15 +215,6 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
         if v_game not in reviewsFiles:
             continue
 
-        reviewsPath = reviewsFiles[v_game]
-        reviews = {}
-        for reviewType, path in reviewsPath.items():
-            summary = json.load(open(path, "r", encoding="utf-8"))
-            reviews[reviewType] = "\n".join(f"- {r.strip()}" for r in summary)
-
-        pos = reviews.get("positive", "No positive reviews available.")
-        neg = reviews.get("negative", "No negative reviews available.")
-
         docID = hashlib.sha256(v_game.encode()).hexdigest()
 
         if docID in seenIds:
@@ -149,19 +227,6 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
             if existing and existing["ids"]:
                 continue
 
-        top_str = "\n".join(
-            f"- Theme: {topics_meta.get(str(tid), {})['title']} Description: {topics_meta.get(str(tid), {})['description']} ({d.get('percentage', 0)}%)"
-            for tid, d in games_to_topics.get(v_game, {}).items()
-        )
-
-        document = (
-            f"Title: {v_game} | Genres: {info['genres']}\n"
-            f"Description: {info['description']}\n\n"
-            f"Positive Reviews Summary:\n{pos}\n\n"
-            f"Negative Reviews Summary:\n{neg}\n\n"
-            f"Associated Topics:\n{top_str or '- None.'}"
-        )
-
         metadata = {
             "videogame": v_game,
             "type": "game_summary",
@@ -171,7 +236,13 @@ def addDocsToCollection(forceRefresh: bool = False) -> None:
             "genres": info["genres"],
         }
 
-        newDocuments.append(document)
+        newDocuments.append(
+            generateDocument(
+                v_game,
+                info,
+                topics=gt,
+            )
+        )
         newIds.append(docID)
         newMetadatas.append(metadata)
     if newDocuments:
