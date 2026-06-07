@@ -165,3 +165,7 @@ Este nodo recibe el nombre extraído por el Nodo 4 y es el responsable de recupe
    4. Vuelve a intentar la coincidencia sobre los juegos nuevos y, si encuentra uno válido, genera su documento.
 
 Finalmente, el documento recuperado se envía al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta), que genera la respuesta final para el usuario. Si no se encuentra, se devuelve una lista vacía.
+
+### Nodo Sintético
+
+Este es un nodo adicional que se activa solo si `useSynthetic` es `True`. Su función es simular una posible respuesta del usuario después de recibir la respuesta del Nodo 2. Esto permite probar el sistema de manera autónoma sin necesidad de interacción humana constante, generando nuevas consultas basadas en la conversación previa. El prompt del sistema instruye al modelo a ser creativo pero relevante, y a finalizar la simulación con `:q` para indicar que no hay más preguntas.

@@ -42,6 +42,7 @@ def updateData(forceRefresh=False):
 class Orchestrator:
 
     currentDirectory = os.path.dirname(os.path.abspath(__file__))
+    useSynthetic = True
 
     def main(self, q: str) -> str:
         """
@@ -90,7 +91,12 @@ class Orchestrator:
                 f.write("\n")
 
             print(finalOutput)
-            q = input("Enter a new query (or ':q' to quit): ")
+
+            if self.useSynthetic:
+                q = self.nodeSynth()
+                print(f"Simulated user response: {q}\n")
+            else:
+                q = input("Enter a new query (or ':q' to quit): ")
 
         return finalOutput
 
@@ -108,7 +114,7 @@ class Orchestrator:
             "You are the brain of a multi-agent system. Your only function is to classify the user's query. You have two actions available:\n"
             " - 'rag': If the user's query is related to videogames and you think that retrieving relevant documents from the collection would help answer the query, choose this action.\n"
             " - 'nothing': If the user's query is not related to videogames or you think that retrieving documents would not help answer the query, choose this action. \n\n"
-            " - 'search': If the user's query is related to videogames and you think that retrieving the specific document by stating the real name of the game, choose this action. \n\n"
+            " - 'search': If the user's query is related to videogames and you think that retrieving the specific document by only stating the real name of the game, choose this action. You can only search by the game name, to search for other thing use rag. \n\n"
             "REQUIRED STRUCTURE in JSON format:\n"
             '{"Thinking": "[Explain here why you choose the tool.]", '
             '"Action": "[rag or nothing or search]" '
@@ -358,6 +364,28 @@ class Orchestrator:
             )
 
         return documents
+
+    def nodeSynth(self) -> str:
+        """
+        This is a synthetic node that simulates a possible user response based on the conversation so far.
+
+        Args:
+            - None
+
+        Returns:
+            - str: The simulated user response.
+        """
+        systemPrompt = "You are meant to simulate a possible answer by the user by looking at all the previous conversation. You are not trying to give a helpful answer, you are just trying to simulate what the user could say. You can be as creative as you want, but try to keep it relevant to the previous conversation. To end the simulation, just have to say just ':q'. Don't say goodbye, thank you or anything like that, just end with ':q'. The only other option is that you want to ask a follow up question."
+
+        messages = copy.deepcopy(self.completeConversation)
+        messages.insert(0, {"role": "system", "content": systemPrompt})
+
+        # Use the model
+        m = LLMManager.LLMManager(decoders.SamplingDecoder())
+        finalResponse = m.processPrompt(messages, maxTokens=1000)
+        response = m.decodeTokens(finalResponse)
+
+        return response
 
 
 if __name__ == "__main__":
