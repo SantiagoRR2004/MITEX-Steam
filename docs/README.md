@@ -159,10 +159,9 @@ Este nodo recibe el nombre extraído por el Nodo 4 y es el responsable de recupe
 1. Primero intenta encontrar una coincidencia aproximada en [`videogames.json`](../videogames.json) usando `difflib.get_close_matches` con `cutoff=0.6`.
 2. Si encuentra coincidencia, genera el documento con `rag.generateDocument` y lo devuelve.
 3. Si no encuentra coincidencia:
-
-    1. Hace una búsqueda web en Steam (`https://store.steampowered.com/search/results/`) con `BeautifulSoup`.
-    2. Detecta juegos nuevos, actualiza [`videogames.json`](../videogames.json).
-    3. Ejecuta `updateData()` para incorporar esos nuevos juegos al pipeline completo (limpieza, tópicos, resumen extractivo y colección RAG).
-    4. Vuelve a intentar la coincidencia sobre los juegos nuevos y, si encuentra uno válido, genera su documento.
+   1. Hace una búsqueda web en Steam (`https://store.steampowered.com/search/results/`) con `BeautifulSoup`.
+   2. Detecta juegos nuevos, actualiza [`videogames.json`](../videogames.json).
+   3. Ejecuta `updateData()` para incorporar esos nuevos juegos al pipeline completo (limpieza, tópicos, resumen extractivo y colección RAG).
+   4. Vuelve a intentar la coincidencia sobre los juegos nuevos y, si encuentra uno válido, genera su documento.
 
 Finalmente, el documento recuperado se envía al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta), que genera la respuesta final para el usuario. Si no se encuentra, se devuelve una lista vacía.
