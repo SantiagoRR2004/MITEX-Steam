@@ -132,7 +132,7 @@ Para garantizar que este nodo no rompa el flujo de ejecución, forzamos al model
 
 - Si se elige `nothing`, se va al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta).
 
-- Si se elige `search`, se va al [Nodo 4](#nodo-4-búsqueda-por-nombre-de-juego).
+- Si se elige `search`, se va al [Nodo 4](#nodo-4-extracción-del-nombre-del-juego).
 
 ### Nodo 2: Recuperación RAG y Respuesta
 
@@ -144,6 +144,25 @@ Si el usuario responde algo distinto de `:q`, se vuelve al [Nodo 1](#nodo-1-quer
 
 Invoca la función de búsqueda híbrida `rag.rrf` para recuperar los 3 documentos más relevantes de la colección y se va al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta).
 
-### Nodo 4: Búsqueda por nombre de juego
+### Nodo 4: Extracción del nombre del juego
 
-En este nodo primero se utiliza un LLM para analizar la conversación hasta el momento y extraer el nombre del videojuego adecuado. Una vez que se tiene el nombre, se busca la coincidencia más cercana en la lista de [`videogames.json`](../videogames.json) usando `difflib.get_close_matches`. Con la coincidencia encontrada, se genera el documento correspondiente con la función `rag.generateDocument` y se devuelve al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta) para que el asistente final pueda usarlo en su respuesta.
+Este nodo solo analiza la conversación hasta el momento y extraer el nombre del videojuego adecuado. Para ello utiliza un LLM con una salida JSON estricta con la forma:
+
+`{"Game": "[Name of the game]"}`
+
+Al igual que en el Nodo 1, se aplica `TokenSequenceConstraint` para forzar la estructura y evitar respuestas fuera de formato. El resultado se registra en el log de ejecución y se pasa directamente al [Nodo 5](#nodo-5-recuperación-del-documento-del-videojuego).
+
+### Nodo 5: Recuperación del documento del videojuego
+
+Este nodo recibe el nombre extraído por el Nodo 4 y es el responsable de recuperar el documento final del juego.
+
+1. Primero intenta encontrar una coincidencia aproximada en [`videogames.json`](../videogames.json) usando `difflib.get_close_matches` con `cutoff=0.6`.
+2. Si encuentra coincidencia, genera el documento con `rag.generateDocument` y lo devuelve.
+3. Si no encuentra coincidencia:
+
+    1. Hace una búsqueda web en Steam (`https://store.steampowered.com/search/results/`) con `BeautifulSoup`.
+    2. Detecta juegos nuevos, actualiza [`videogames.json`](../videogames.json).
+    3. Ejecuta `updateData()` para incorporar esos nuevos juegos al pipeline completo (limpieza, tópicos, resumen extractivo y colección RAG).
+    4. Vuelve a intentar la coincidencia sobre los juegos nuevos y, si encuentra uno válido, genera su documento.
+
+Finalmente, el documento recuperado se envía al [Nodo 2](#nodo-2-recuperación-rag-y-respuesta), que genera la respuesta final para el usuario. Si no se encuentra, se devuelve una lista vacía.
