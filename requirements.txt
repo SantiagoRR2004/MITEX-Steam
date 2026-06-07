@@ -1,4 +1,5 @@
 black
+beautifulsoup4
 bertopic
 langdetect
 nltk

@@ -1,4 +1,5 @@
 from datetime import datetime
+from bs4 import BeautifulSoup
 import dataAcquisition
 import dataHandling
 import topicModeling
@@ -6,6 +7,7 @@ import extractiveSummary
 import rag
 import LLMManager
 import decoders
+import requests
 import difflib
 import models
 import torch
@@ -265,21 +267,95 @@ class Orchestrator:
 
         self.completeExecution[f"{datetime.now()} Node 4 Output"] = output
 
+        return self.node5(output["Game"])
+
+    def node5(self, videogameName: str) -> list:
+        """
+        This node receives the name of the videogame and retrieves the document.
+
+        If the there is no close match for the name of the videogame,
+        it performs a web search to find the correct name and then retrieves the document.
+
+        Args:
+            - videogameName (str): The name of the videogame.
+
+        Returns:
+            - list: The list with the retrieved document.
+        """
         # Try to find the closest match
-        videogamesFile = os.path.join(currentDirectory, "videogames.json")
+        videogamesFile = os.path.join(self.currentDirectory, "videogames.json")
         with open(videogamesFile, "r", encoding="utf-8") as f:
-            videogames = list(json.load(f).keys())
+            videogames = json.load(f)
 
         match = difflib.get_close_matches(
-            output["Game"], videogames, n=1, cutoff=0.6
+            videogameName, videogames.keys(), n=1, cutoff=0.6
         )  # 60% similarity threshold
+        self.completeExecution[f"{datetime.now()} Node 5 Closest Match"] = match
 
-        self.completeExecution[f"{datetime.now()} Node 4 Closest Match"] = match
+        if match:
+            documents = [rag.generateDocument(match[0])] if match else []
+            self.completeExecution[f"{datetime.now()} Node 5 Retrieved Document"] = (
+                documents[0]
+            )
 
-        documents = [rag.generateDocument(match[0])] if match else []
-        self.completeExecution[f"{datetime.now()} Node 4 Retrieved Document"] = (
-            documents[0]
-        )
+        else:
+            # Use web search
+            params = {
+                "term": videogameName,
+                "f": "games",
+                "cc": "US",
+                "l": "english",
+                "hidef2p": 1,
+            }
+
+            response = requests.get(
+                "https://store.steampowered.com/search/results/", params=params
+            )
+
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            # Div with id="search_result_container"
+            resultsContainer = soup.find("div", id="search_result_container")
+
+            newVideogames = {}
+
+            # Iterate through a class="search_result_row ds_collapse_flag"
+            for result in resultsContainer.find_all(
+                "a", class_="search_result_row ds_collapse_flag"
+            ):
+
+                videogameID = int(result["data-ds-appid"])
+                videogameFoundName = result.find("span", class_="title").text.strip()
+
+                if videogameFoundName not in videogames:
+                    newVideogames[videogameFoundName] = videogameID
+
+            self.completeExecution[f"{datetime.now()} Node 5 New Videogames Found"] = (
+                newVideogames
+            )
+
+            # Update videogames.json
+            videogames.update(newVideogames)
+            videogames = dict(sorted(videogames.items(), key=lambda x: x[0].lower()))
+            with open(videogamesFile, "w", encoding="utf-8") as f:
+                json.dump(videogames, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+
+            # Generate documents
+            updateData(forceRefresh=False)
+
+            match = difflib.get_close_matches(
+                videogameName, newVideogames.keys(), n=1, cutoff=0.6
+            )  # 60% similarity threshold
+            self.completeExecution[
+                f"{datetime.now()} Node 5 Closest Match After Search"
+            ] = match
+
+            documents = [rag.generateDocument(match[0])] if match else []
+            self.completeExecution[f"{datetime.now()} Node 5 Retrieved Document"] = (
+                documents[0]
+            )
 
         return documents
 
