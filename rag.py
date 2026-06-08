@@ -165,12 +165,13 @@ def generateDocument(
             f" ({d.get('percentage', 0)}%)"
         )
 
+    topics_text = "\n".join(topicsDescription) or "- None."
     return (
         f"Title: {videogame} | Genres: {info['genres']}\n"
         f"Description: {info['description']}\n\n"
         f"Positive Reviews Summary:\n{posText}\n\n"
         f"Negative Reviews Summary:\n{negText}\n\n"
-        f"Associated Topics:\n{"\n".join(topicsDescription) or '- None.'}"
+        f"Associated Topics:\n{topics_text}"
     )
 
 
