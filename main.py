@@ -91,9 +91,11 @@ class Orchestrator:
                 f.write("\n")
 
             print(finalOutput)
+            print()
 
             if self.useSynthetic:
                 q = self.nodeSynth()
+                self.completeExecution[f"{datetime.now()} Synthetic Query"] = q
                 print(f"Simulated user response: {q}\n")
             else:
                 q = input("Enter a new query (or ':q' to quit): ")
@@ -111,12 +113,19 @@ class Orchestrator:
             - dict: A dictionary containing the thought process, the action to take.
         """
         systemPrompt = (
-            "You are the brain of a multi-agent system. Your only function is to classify the user's query. You have two actions available:\n"
-            " - 'rag': If the user's query is related to videogames and you think that retrieving relevant documents from the collection would help answer the query, choose this action.\n"
-            " - 'nothing': If the user's query is not related to videogames or you think that retrieving documents would not help answer the query, choose this action. \n\n"
-            " - 'search': If the user's query is related to videogames and you think that retrieving the specific document by only stating the real name of the game, choose this action. You can only search by the game name, to search for other thing use rag. \n\n"
+            "You are the brain of a multi-agent system. Your only function is to classify the user's query.\n\n"
+            "To help you decide, you should know that a 'Videogame Document' in our system contains the following structured information:\n"
+            " - Title and Genres\n"
+            " - Full Description of the game\n"
+            " - Summary of Positive Reviews (bullet points)\n"
+            " - Summary of Negative Reviews (bullet points)\n"
+            " - Associated Reviews Topics/Themes with percentage of relevance (e.g., Theme: Sci-Fi, Description: ..., 85%)\n\n"
+            "You have three actions available:\n"
+            " - 'rag': If the query is broad, compares multiple games, or asks about genres/tropes, and you think retrieving parts of various documents will help answer it (e.g., 'What RPGs have good sci-fi stories?').\n"
+            " - 'search': If the user explicitly asks for information, reviews, opinions, or themes of ONE specific videogame, and you can identify its name (e.g., 'What do people think about Cyberpunk 2077?'). You can ONLY search by the game name.\n"
+            " - 'nothing': If the query is not related to videogames, is conversational, or doesn't require any document data (e.g., 'Hello', 'Who are you?').\n\n"
             "REQUIRED STRUCTURE in JSON format:\n"
-            '{"Thinking": "[Explain here why you choose the tool.]", '
+            '{"Thinking": "[Explain here why you choose the tool based on the query and the document structure.]", '
             '"Action": "[rag or nothing or search]" '
             "}\n"
         )
@@ -171,7 +180,17 @@ class Orchestrator:
             - str: The final response.
         """
         systemPrompt = (
-            "You are a helpful assistant. Your task is to answer the user's query."
+            "You are an expert videogame assistant. Your task is to answer the user's query using the provided documents.\n\n"
+            "ABOUT THE DOCUMENTS:\n"
+            " - Each document contains: Title, Genres, Description, Positive/Negative Reviews, and Associated Topics.\n"
+            " - NOTE: The 'Associated Topics' are extracted directly from user reviews, representing the key themes discussed by the community.\n"
+            " - CRITICAL: You will often receive up to 3 documents, but the user's query might only target one or two specific game. "
+            "Identify which document matches the user's intent, focus entirely on it, and IGNORE the other irrelevant documents. Do not try to combine them if it is not relevant.\n\n"
+            "CRITICAL RULES:\n"
+            "1. FOCUS & RELEVANCE: Answer using only the document(s) that actually matter for the query. If a document is irrelevant, disregard it completely.\n"
+            "2. OBJECTIVITY: Rely strictly on the provided data. If the documents do not contain the answer, politely state that you lack enough information.\n"
+            "3. NO CITATIONS: Integrate the facts naturally. Do NOT say 'According to Document 1...' or 'In the first game...'. Just talk about the game naturally.\n"
+            "4. TONE: Concise, direct, and objective.\n"
         )
         self.completeExecution[f"{datetime.now()} Node 2 Prompt"] = systemPrompt
 
@@ -375,12 +394,21 @@ class Orchestrator:
         Returns:
             - str: The simulated user response.
         """
-        systemPrompt = "You are meant to simulate a possible answer by the user by looking at all the previous conversation. You are not trying to give a helpful answer, you are just trying to simulate what the user could say. You can be as creative as you want, but try to keep it relevant to the previous conversation. To end the simulation, just have to say just ':q'. Don't say goodbye, thank you or anything like that, just end with ':q'. The only other option is that you want to ask a follow up question."
-
+        systemPrompt = (
+            "You are simulating a HUMAN USER (a gamer) chatting with an AI videogame assistant. "
+            "Your job is to keep the conversation going naturally based on the history.\n\n"
+            "RULES FOR THE SIMULATION:\n"
+            "1. ROLE: You are the one asking questions, looking for recommendations, or asking for opinions about games. "
+            "NEVER answer your own questions, NEVER recommend games to the AI, and NEVER act like the assistant.\n"
+            "2. STYLE: Write like a normal human in a chat. Keep it casual, relatively short (1-2 sentences), and direct.\n"
+            "3. ACTIONS AVAILABLE:\n"
+            "   - Ask a follow-up question about the game the assistant just mentioned (e.g., 'Does it have multiplayer?', 'Is the story good?').\n"
+            "   - Ask for a recommendation based on a genre or vibe (e.g., 'Can you recommend a good indie horror game?').\n"
+            "   - If the conversation feels naturally finished or you have no more questions, just type exactly ':q' to exit. Do not say goodbye or thank you, just ':q'.\n"
+        )
         messages = copy.deepcopy(self.completeConversation)
         messages.insert(0, {"role": "system", "content": systemPrompt})
 
-        # Use the model
         m = LLMManager.LLMManager(decoders.SamplingDecoder())
         finalResponse = m.processPrompt(messages, maxTokens=1000)
         response = m.decodeTokens(finalResponse)
