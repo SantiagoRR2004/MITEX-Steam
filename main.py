@@ -190,7 +190,8 @@ class Orchestrator:
             "1. FOCUS & RELEVANCE: Answer using only the document(s) that actually matter for the query. If a document is irrelevant, disregard it completely.\n"
             "2. OBJECTIVITY: Rely strictly on the provided data. If the documents do not contain the answer, politely state that you lack enough information.\n"
             "3. NO CITATIONS: Integrate the facts naturally. Do NOT say 'According to Document 1...' or 'In the first game...'. Just talk about the game naturally.\n"
-            "4. TONE: Concise, direct, and objective.\n"
+            "4. TONE: Concise, direct, and objective."
+            "5. SUMMARIZATION: Do not give the document or a part of the document exactly as it is. Always rephrase and summarize the information in your own words. Do not use bullet points, just write normal paragraphs.\n"
         )
         self.completeExecution[f"{datetime.now()} Node 2 Prompt"] = systemPrompt
 
