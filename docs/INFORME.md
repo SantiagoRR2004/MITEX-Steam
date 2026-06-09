@@ -24,6 +24,7 @@ Con los ids de los juegos más vendidos, se ejecuta un proceso de extracción ma
 Además, para cada reseña almacenamos la puntuación de utilidad que los usuarios de Steam han otorgado a cada opinión, lo cual se convierte en un dato crucial para el posterior proceso de resumen extractivo basado en grafos, permitiendo priorizar las opiniones más valoradas por la comunidad.
 
 ### Limpieza y preprocesamiento de datos
+
 Respecto a la limpieza de datos, el problema técnico identificado fue la alta redundancia de los datos originales de la API de Steam y la contaminación de las reseñas por comentarios en idiomas distintos al inglés. La solución adoptada fue el desarrollo de un pipeline de limpieza que utiliza un ejecutor de procesos en paralelo para aprovechar al máximo los múltiples núcleos del procesador de la computadora. Este componente limpia el texto de las opiniones, elimina aquellas reseñas que carecen de contenido o que pertenecen a otros idiomas, y reduce la ficha técnica del juego a únicamente seis campos clave esenciales para el sistema de recuperación: nombre, descripción, plataformas compatibles, clasificación por edades, géneros y precio. El resultado es un conjunto de archivos optimizados almacenados en la carpeta cleanData y que aceleran drásticamente las fases de lectura y vectorización posteriores. Adjuntamos tres imágenes de ejemplo que muestran los archivos resultantes de este proceso de limpieza para un juego concreto:
 
 ![Expedition33 Info](expedition33info.png)
@@ -33,15 +34,16 @@ Respecto a la limpieza de datos, el problema técnico identificado fue la alta r
 ![Expedition33 Positives](image-2.png)
 
 ### Modelado de tópicos
-En el módulo de modelado de temas, el problema era descubrir las corrientes de opinión dominantes y los aspectos críticos de los videojuegos entre miles de comentarios heterogéneos sin depender de categorías manuales. Además de poder asociar videojuegos no solo por sus géneros sino por despertar opiniones similares entre el público; ya sea positivas o negativas. 
 
-La solución consistió en integrar la librería BERTopic para procesar todas las reviews limpias a la vez. No se realiza para cada juego por separado, sino en conjunto para poder determinar patrones en general entre ellos. Primero, se aplica un filtro exhaustivo de exclusión de palabras comunes que combina los términos genéricos del lenguaje junto con una lista personalizada de vocabulario propio de la industria de los videojuegos (game, play, like...). A continuación, el proceso realiza una reducción de dimensionalidad mediante la técnica UMAP basándose en la similitud del coseno, seguida de un agrupamiento por densidad con el algoritmo HDBSCAN, exigiendo un volumen mínimo por grupo para garantizar la relevancia estadística. 
+En el módulo de modelado de temas, el problema era descubrir las corrientes de opinión dominantes y los aspectos críticos de los videojuegos entre miles de comentarios heterogéneos sin depender de categorías manuales. Además de poder asociar videojuegos no solo por sus géneros sino por despertar opiniones similares entre el público; ya sea positivas o negativas.
+
+La solución consistió en integrar la librería BERTopic para procesar todas las reviews limpias a la vez. No se realiza para cada juego por separado, sino en conjunto para poder determinar patrones en general entre ellos. Primero, se aplica un filtro exhaustivo de exclusión de palabras comunes que combina los términos genéricos del lenguaje junto con una lista personalizada de vocabulario propio de la industria de los videojuegos (game, play, like...). A continuación, el proceso realiza una reducción de dimensionalidad mediante la técnica UMAP basándose en la similitud del coseno, seguida de un agrupamiento por densidad con el algoritmo HDBSCAN, exigiendo un volumen mínimo por grupo para garantizar la relevancia estadística.
 
 Para evitar redundancias en las palabras clave de cada tema, se aplica un principio de máxima relevancia marginal, y finalmente se implementa una estrategia de reasignación de elementos atípicos o ruidosos utilizando la frecuencia de término inversa. Con este proceso obtenemos una extracción limpia de veinticuatro tópicos semánticos (sin contar el cluster de ruído) que caracterizan desde mecánicas de combate hasta problemas de optimización técnica de los juegos.
 
 Un problema adicional que surgió fue el número de reseñas en el clúster de ruido, el cual era muy elevado. Para solucionarlo, se reasignan a los temas principales mediante una estrategia basada en c-TF-IDF, recalculando después las palabras clave para mantener la precisión.
 
-Una vez definidos estos clústeres, se utiliza un LLM local para procesar las palabras clave de cada clúster. Esto permite generar de forma automática un título descriptivo corto y una explicación orientada a la experiencia del usuario para cada tópico. 
+Una vez definidos estos clústeres, se utiliza un LLM local para procesar las palabras clave de cada clúster. Esto permite generar de forma automática un título descriptivo corto y una explicación orientada a la experiencia del usuario para cada tópico.
 
 Posteriormente, se reorganiza esta estructura orientada a clústeres en una vista centrada en el videojuego, mapeando qué porcentaje y volumen de cada tema aparece en las opiniones de un juego concreto.
 
@@ -54,13 +56,13 @@ En el JSON gamesTopics.json de la carpeta topicsData se pueden observar los tóp
 ![Ejemplo de tópicos](topics.png)
 
 ### Resumen extractivo
+
 Por último, el módulo de resumen extractivo aborda el problema de condensar el valor de miles de opiniones positivas y negativas sin saturar el contexto del modelo lingüístico con ideas repetitivas. La solución fue diseñar un algoritmo de resumen basado en grafos informáticos. El sistema divide las reseñas en frases individuales a través de herramientas de procesamiento de lenguaje natural y las convierte en vectores densos. Utilizando una librería de redes, se construye un grafo no dirigido donde los nodos representan las frases y las conexiones miden su similitud conceptual, descartando cualquier enlace por debajo de un umbral de ruido establecido. Para priorizar las opiniones más valiosas, el algoritmo ejecuta una variante personalizada del algoritmo PageRank que utiliza las puntuaciones de utilidad nativas de Steam como peso, aplicando una amortiguación logarítmica para evitar que las reseñas excesivamente largas dominen la centralidad del grafo de manera injusta. El resultado es la selección matemática de las cinco frases más representativas y densas en información para el espectro positivo y negativo de cada título.
 
 Los resultados se pueden ver en la carpeta summaryData. Este es un ejemplo de resumen extractivo para el juego "Baldur's Gate 3":
 
 ![Resumen Negativo bg3](negative_bg3.png)
 ![Resumen Positivo bg3](positive_bg3.png)
-
 
 ### Estructuración de los documentos RAG
 
@@ -105,7 +107,6 @@ Con el fin de evaluar la calidad del sistema multiagente hemos creado una serie 
 Gracias a estos logs, nos damos cuenta del correcto funcionamiento general del sistema. Es capaz de buscar con éxito la información de un videojuego específico preguntado por el usuario y de generar una respuesta coherente y relevante utilizando la información recuperada. También busca documentos relacionados con preguntas más generales de videojuegos, por ejemplo recomendaciones de juegos de rol, y es capaz de generar respuestas que integran información de múltiples documentos recuperados.
 
 A pesar de la solidez general del pipeline, la evaluación crítica del sistema ha permitido identificar fallos puntuales en el comportamiento del asistente final que representan áreas de mejora. Se ha observado que, en escenarios específicos de generación de respuestas, el modelo tiende a volcar fragmentos del documento de contexto de manera literal en lugar de realizar un proceso de síntesis e integración orgánica, lo cual afecta la naturalidad de la interacción. Asimismo, se han detectado redundancias operativas donde el sistema inicia procesos de búsqueda sobre documentos que ya se encuentran cargados en la memoria del historial de la conversación. Estos comportamientos sugieren la necesidad de refinar las directrices de los prompts de sistema para optimizar el consumo de recursos y mejorar la fluidez de las respuestas entregadas al usuario. Sin emabargo, pese a la mejora de los system prompts, no se ha conseguido erradicar completamente este problema, lo que indica que podría ser necesario implementar algún mecanismo de control adicional o emplear un modelo de lenguaje más avanzado capaz de adaptarse mejor a las reglas de generación establecidas.
-
 
 ## Cambios aplicados desde la entrega inicial
 
