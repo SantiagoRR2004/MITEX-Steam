@@ -352,7 +352,7 @@ class Orchestrator:
             ):
 
                 videogameID = int(result["data-ds-appid"])
-                videogameFoundName = result.find("span", class_="title").text.strip()
+                videogameFoundName = result["href"].split("/")[6]
 
                 if videogameFoundName not in videogames:
                     newVideogames[videogameFoundName] = videogameID
