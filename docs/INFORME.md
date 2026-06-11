@@ -37,7 +37,7 @@ Respecto a la limpieza de datos, el problema técnico identificado fue la alta r
 
 En el módulo de modelado de temas, el problema principal consistía en descubrir las corrientes de opinión dominantes y los aspectos críticos de los videojuegos entre miles de comentarios heterogéneos sin depender de clasificaciones manuales. Además, se buscaba asociar videojuegos no solo por sus géneros, sino por despertar opiniones o reacciones similares en la comunidad (ya fueran positivas o negativas).
 
-La solución consistió en integrar la librería `BERTopic` para procesar todas las reseñas limpias de forma conjunta (no por juego separado), permitiendo identificar patrones temáticos generales. Primero, se aplica un filtro exhaustivo de *stopwords* que combina los términos genéricos del inglés con una lista personalizada de vocabulario propio del sector de los videojuegos (`game`, `play`, `like`, etc.). A continuación, se realiza una reducción de dimensionalidad mediante la técnica UMAP basada en la similitud del coseno, seguida de un agrupamiento por densidad con el algoritmo HDBSCAN, exigiendo un volumen mínimo por grupo para garantizar la relevancia estadística.
+La solución consistió en integrar la librería `BERTopic` para procesar todas las reseñas limpias de forma conjunta (no por juego separado), permitiendo identificar patrones temáticos generales. Primero, se aplica un filtro exhaustivo de _stopwords_ que combina los términos genéricos del inglés con una lista personalizada de vocabulario propio del sector de los videojuegos (`game`, `play`, `like`, etc.). A continuación, se realiza una reducción de dimensionalidad mediante la técnica UMAP basada en la similitud del coseno, seguida de un agrupamiento por densidad con el algoritmo HDBSCAN, exigiendo un volumen mínimo por grupo para garantizar la relevancia estadística.
 
 Para evitar redundancias en las palabras clave de cada tema, se aplica un criterio de Máxima Relevancia Marginal (MMR), y finalmente se implementa una estrategia de reasignación de elementos atípicos o ruidosos utilizando la frecuencia de término inversa (c-TF-IDF). Con este proceso se obtiene una extracción limpia de 24 tópicos semánticos (excluyendo el clúster de ruido) que caracterizan desde mecánicas de combate hasta problemas de rendimiento técnico.
 
@@ -66,7 +66,7 @@ Por último, el módulo de resumen extractivo aborda el problema de condensar el
 
 Para priorizar las opiniones más valiosas, el algoritmo ejecuta una variante personalizada de `PageRank` que emplea las puntuaciones de utilidad nativas de Steam como ponderación de inicio. Para evitar que las reseñas excesivamente largas dominen la centralidad del grafo de forma injusta, se aplica una amortiguación logarítmica que divide la puntuación de utilidad de cada frase por el logaritmo del total de frases de su reseña original. El resultado es la selección matemática de las 5 frases más representativas y con mayor densidad de información para el espectro positivo y negativo de cada título.
 
-Los resultados se almacenan en la carpeta `summaryData`. A continuación, se muestra el resultado del resumen extractivo para el juego *Baldur's Gate 3*:
+Los resultados se almacenan en la carpeta `summaryData`. A continuación, se muestra el resultado del resumen extractivo para el juego _Baldur's Gate 3_:
 
 ![Resumen Negativo bg3](negative_bg3.png)
 ![Resumen Positivo bg3](positive_bg3.png)
@@ -105,9 +105,9 @@ La evaluación de los tópicos semánticos se realiza comparando las métricas d
 - **Estado Inicial (antes de la reasignación de outliers):** Se obtiene un total de 24 tópicos con una proporción de outliers del 43,98 % y un valor de coherencia semántica $C_v$ de 0,4706.
 - **Estado Optimizado (tras la reasignación c-TF-IDF con un umbral de 0,05):** El porcentaje de outliers se reduce al 16,56 %, mientras que la coherencia semántica $C_v$ de Gensim se eleva hasta 0,5433, demostrando una cohesión semántica interna más sólida tras reasignar las opiniones ruidosas a sus tópicos más afines.
 
-El análisis de los temas extraídos revela agrupamientos de alto valor conceptual que superan las categorías rígidas de género de Steam. Por ejemplo, el *Tópico 8* (enfocado en combate: *"parry"*, *"attack"*, *"dodge"*, *"boss"*) permite asociar semánticamente títulos tan dispares en género como *Elden Ring* (action-RPG/Souls) y *Clair Obscur: Expedition 33* (combate por turnos), puesto que ambos exigen precisión en mecánicas de esquiva y contraataque. Asimismo, el *Tópico 11* aísla con precisión problemas de optimización de red, quejas sobre tramposos (*cheaters*) e incompatibilidades de sistemas *anticheat*.
+El análisis de los temas extraídos revela agrupamientos de alto valor conceptual que superan las categorías rígidas de género de Steam. Por ejemplo, el _Tópico 8_ (enfocado en combate: _"parry"_, _"attack"_, _"dodge"_, _"boss"_) permite asociar semánticamente títulos tan dispares en género como _Elden Ring_ (action-RPG/Souls) y _Clair Obscur: Expedition 33_ (combate por turnos), puesto que ambos exigen precisión en mecánicas de esquiva y contraataque. Asimismo, el _Tópico 11_ aísla con precisión problemas de optimización de red, quejas sobre tramposos (_cheaters_) e incompatibilidades de sistemas _anticheat_.
 
-**Limitaciones detectadas:** Se observó un desbalance en el tamaño de los clústeres. El *Clúster 0* funciona como un saco genérico que engloba un volumen desproporcionado de comentarios genéricos, mientras que los clústeres periféricos son sumamente específicos. Los experimentos de ajuste de hiperparámetros indicaron que intentar reducir el clúster genérico fragmenta en exceso los temas específicos, lo que sugiere una limitación intrínseca de los datos (reseñas de Steam) en la que muchas opiniones expresan valoraciones afectivas cortas sin referencias técnicas o mecánicas concretas.
+**Limitaciones detectadas:** Se observó un desbalance en el tamaño de los clústeres. El _Clúster 0_ funciona como un saco genérico que engloba un volumen desproporcionado de comentarios genéricos, mientras que los clústeres periféricos son sumamente específicos. Los experimentos de ajuste de hiperparámetros indicaron que intentar reducir el clúster genérico fragmenta en exceso los temas específicos, lo que sugiere una limitación intrínseca de los datos (reseñas de Steam) en la que muchas opiniones expresan valoraciones afectivas cortas sin referencias técnicas o mecánicas concretas.
 
 ### 2. Validación de los Resúmenes Extractivos de Reseñas
 
@@ -121,7 +121,7 @@ La robustez de la fase de resumen extractivo se valida a través del diseño alg
 Para el análisis dinámico en tiempo real y la traza del flujo del orquestador, el sistema registra la secuencia de prompts, contextos recuperados de la base vectorial ChromaDB y salidas en el log de ejecución `completeExecutions.json`, ubicado en la raíz del proyecto.
 
 - **Confiabilidad del Enrutamiento (Nodo 1):** Mediante la integración de decodificadores guiados con la restricción sintáctica `TokenSequenceConstraint` (en las líneas 139-150 de `main.py`), se garantiza un 100 % de validez sintáctica de la salida. El LLM online está limitado a generar únicamente una estructura JSON correcta con una de las opciones predefinidas de acción (`nothing`, `rag` o `search`), impidiendo cualquier fallo sintáctico o salida de texto plano que rompa el flujo de control del orquestador.
-- **Extracción de Entidades y Coincidencia Difusa (Nodos 4 y 5):** 
+- **Extracción de Entidades y Coincidencia Difusa (Nodos 4 y 5):**
   - La extracción del nombre del videojuego está estructurada bajo la misma restricción gramatical restringiendo la salida a `{"Game": "[Nombre]"}` en el Nodo 4.
   - La coincidencia difusa del Nodo 5 emplea `difflib.get_close_matches` con un umbral de coincidencia del 60 % (`cutoff=0.6` en la línea 317) para mitigar variaciones ortográficas de los usuarios.
   - En caso de fallar la coincidencia en la base local, la petición HTTP en caliente a la tienda de Steam con `BeautifulSoup` y la posterior indexación offline incremental descargan e indexan la información del juego de manera reactiva, haciéndolo disponible de inmediato en la base ChromaDB.
@@ -133,6 +133,7 @@ A continuación, se adjunta un fragmento de los logs generados en `completeExecu
 ### 4. Limitaciones y Áreas de Mejora
 
 A pesar de los resultados satisfactorios, la evaluación detallada de los logs ha desvelado dos limitaciones persistentes:
+
 1. **Copias literales del contexto:** En ocasiones, el Nodo 2 tiende a volcar fragmentos del resumen extractivo directamente en lugar de reformularlos de manera fluida. Aunque las reglas del prompt del sistema redujeron este comportamiento, para eliminarlo por completo se requeriría el uso de modelos con mayor capacidad de síntesis o la aplicación de filtros de post-procesamiento lingüístico.
 2. **Redundancia en consultas sucesivas:** El sistema carece de memoria sobre las búsquedas vectoriales previas en la misma sesión. Si un usuario hace preguntas consecutivas muy similares, el Organizador activa de nuevo la búsqueda híbrida y recupera exactamente los mismos documentos. La implementación de un mecanismo de caché semántica en el orquestador optimizaría enormemente el flujo en conversaciones largas.
 
