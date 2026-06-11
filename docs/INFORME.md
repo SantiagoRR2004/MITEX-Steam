@@ -29,9 +29,9 @@ Respecto a la limpieza de datos, el problema técnico identificado fue la alta r
 
 ![Expedition33 Info](expedition33info.png)
 
-![Expedition33 Negatives](image-1.png)
+![Expedition33 Negatives](expedition33negatives.png)
 
-![Expedition33 Positives](image-2.png)
+![Expedition33 Positives](expedition33positives.png)
 
 ### Modelado de tópicos
 
