@@ -10,6 +10,7 @@ import decoders
 import requests
 import difflib
 import models
+import pickle
 import torch
 import copy
 import json
@@ -44,6 +45,103 @@ class Orchestrator:
     currentDirectory = os.path.dirname(os.path.abspath(__file__))
     useSynthetic = True
 
+    systemPrompt1 = (
+        "You are the brain of a multi-agent system. Your only function is to classify the user's query.\n\n"
+        "To help you decide, you should know that a 'Videogame Document' in our system contains the following structured information:\n"
+        " - Title and Genres\n"
+        " - Full Description of the game\n"
+        " - Summary of Positive Reviews (bullet points)\n"
+        " - Summary of Negative Reviews (bullet points)\n"
+        " - Associated Reviews Topics/Themes with percentage of relevance (e.g., Theme: Sci-Fi, Description: ..., 85%)\n\n"
+        "You have three actions available:\n"
+        " - 'rag': If the query is broad, compares multiple games, or asks about genres/tropes, and you think retrieving parts of various documents will help answer it (e.g., 'What RPGs have good sci-fi stories?').\n"
+        " - 'search': If the user explicitly asks for information, reviews, opinions, or themes of ONE specific videogame, and you can identify its name (e.g., 'What do people think about Cyberpunk 2077?'). You can ONLY search by the game name.\n"
+        " - 'nothing': If the query is not related to videogames, is conversational, or doesn't require any document data (e.g., 'Hello', 'Who are you?').\n\n"
+        "REQUIRED STRUCTURE in JSON format:\n"
+        '{"Thinking": "[Explain here why you choose the tool based on the query and the document structure.]", '
+        '"Action": "[rag or nothing or search]" '
+        "}\n"
+    )
+
+    systemPrompt2 = (
+        "You are an expert videogame assistant. Your task is to answer the user's query using the provided documents.\n\n"
+        "ABOUT THE DOCUMENTS:\n"
+        " - Each document contains: Title, Genres, Description, Positive/Negative Reviews, and Associated Topics.\n"
+        " - NOTE: The 'Associated Topics' are extracted directly from user reviews, representing the key themes discussed by the community.\n"
+        " - CRITICAL: You will often receive up to 3 documents, but the user's query might only target one or two specific game. "
+        "Identify which document matches the user's intent, focus entirely on it, and IGNORE the other irrelevant documents. Do not try to combine them if it is not relevant.\n\n"
+        "CRITICAL RULES:\n"
+        "1. FOCUS & RELEVANCE: Answer using only the document(s) that actually matter for the query. If a document is irrelevant, disregard it completely.\n"
+        "2. OBJECTIVITY: Rely strictly on the provided data. If the documents do not contain the answer, politely state that you lack enough information.\n"
+        "3. NO CITATIONS: Integrate the facts naturally. Do NOT say 'According to Document 1...' or 'In the first game...'. Just talk about the game naturally.\n"
+        "4. TONE: Concise, direct, and objective."
+        "5. SUMMARIZATION: Do not give the document or a part of the document exactly as it is. Always rephrase and summarize the information in your own words. Do not use bullet points, just write normal paragraphs.\n"
+    )
+
+    systemPrompt4 = (
+        "You are a helpful assistant. Your task is to identify the name of the videogame that the previous node is thinking is needed. If you are not sure about the name of the game, try to give your best guess.\n\n"
+        "REQUIRED STRUCTURE in JSON format:\n"
+        '{"Game": "[Name of the game]"}\n'
+    )
+
+    systemPromptS = (
+        "You are simulating a HUMAN USER (a gamer) chatting with an AI videogame assistant. "
+        "Your job is to keep the conversation going naturally based on the history.\n\n"
+        "RULES FOR THE SIMULATION:\n"
+        "1. ROLE: You are the one asking questions, looking for recommendations, or asking for opinions about games. "
+        "NEVER answer your own questions, NEVER recommend games to the AI, and NEVER act like the assistant.\n"
+        "2. STYLE: Write like a normal human in a chat. Keep it casual, relatively short (1-2 sentences), and direct.\n"
+        "3. ACTIONS AVAILABLE:\n"
+        "   - Ask a follow-up question about the game the assistant just mentioned (e.g., 'Does it have multiplayer?', 'Is the story good?').\n"
+        "   - Ask for a recommendation based on a genre or vibe (e.g., 'Can you recommend a good indie horror game?').\n"
+        "   - If the conversation feels naturally finished or you have no more questions, just type exactly ':q' to exit. Do not say goodbye or thank you, just ':q'.\n"
+    )
+
+    def createCaches(self) -> None:
+        """
+        Create the necessary caches for the nodes.
+
+        Args:
+            - None
+
+        Returns:
+            - None
+        """
+        cacheFolder = os.path.join(self.currentDirectory, "cache")
+        os.makedirs(cacheFolder, exist_ok=True)
+
+        self.caches = {
+            "node1": None,
+            "node2": None,
+            "node4": None,
+            "nodeS": None,
+        }
+
+        for nodeName in self.caches.keys():
+            cacheFile = os.path.join(cacheFolder, f"{nodeName}.pkl")
+
+            if os.path.exists(cacheFile):
+                with open(cacheFile, "rb") as f:
+                    self.caches[nodeName] = pickle.load(f)
+            else:
+
+                message = [
+                    {
+                        "role": "system",
+                        "content": getattr(self, f"systemPrompt{nodeName[-1]}"),
+                    }
+                ]
+                input = models.GEN_TOKENIZER.apply_chat_template(
+                    message, add_generation_prompt=True, return_tensors="pt"
+                )["input_ids"]
+                m = LLMManager.LLMManager(decoders.SamplingDecoder())
+                m.prefill(input)
+
+                self.caches[nodeName] = m.kvCache
+
+                with open(cacheFile, "wb") as f:
+                    pickle.dump(self.caches[nodeName], f)
+
     def main(self, q: str) -> str:
         """
         Execute the full consult from the user query to the final response.
@@ -53,8 +151,9 @@ class Orchestrator:
         Returns:
             - str: The final response to the user query.
         """
-        currentDirectory = os.path.dirname(os.path.abspath(__file__))
-        logFile = os.path.join(currentDirectory, "completeExecutions.json")
+        self.createCaches()
+
+        logFile = os.path.join(self.currentDirectory, "completeExecutions.json")
         self.completeExecution = {f"{datetime.now()} Query": q}
         self.completeConversation = []
 
@@ -112,28 +211,9 @@ class Orchestrator:
         Returns:
             - dict: A dictionary containing the thought process, the action to take.
         """
-        systemPrompt = (
-            "You are the brain of a multi-agent system. Your only function is to classify the user's query.\n\n"
-            "To help you decide, you should know that a 'Videogame Document' in our system contains the following structured information:\n"
-            " - Title and Genres\n"
-            " - Full Description of the game\n"
-            " - Summary of Positive Reviews (bullet points)\n"
-            " - Summary of Negative Reviews (bullet points)\n"
-            " - Associated Reviews Topics/Themes with percentage of relevance (e.g., Theme: Sci-Fi, Description: ..., 85%)\n\n"
-            "You have three actions available:\n"
-            " - 'rag': If the query is broad, compares multiple games, or asks about genres/tropes, and you think retrieving parts of various documents will help answer it (e.g., 'What RPGs have good sci-fi stories?').\n"
-            " - 'search': If the user explicitly asks for information, reviews, opinions, or themes of ONE specific videogame, and you can identify its name (e.g., 'What do people think about Cyberpunk 2077?'). You can ONLY search by the game name.\n"
-            " - 'nothing': If the query is not related to videogames, is conversational, or doesn't require any document data (e.g., 'Hello', 'Who are you?').\n\n"
-            "REQUIRED STRUCTURE in JSON format:\n"
-            '{"Thinking": "[Explain here why you choose the tool based on the query and the document structure.]", '
-            '"Action": "[rag or nothing or search]" '
-            "}\n"
-        )
-
-        self.completeExecution[f"{datetime.now()} Node 1 Prompt"] = systemPrompt
+        self.completeExecution[f"{datetime.now()} Node 1 Prompt"] = self.systemPrompt1
 
         messages = copy.deepcopy(self.completeConversation)
-        messages.insert(0, {"role": "system", "content": systemPrompt})
         messages.append({"role": "user", "content": userMessage})
 
         sequence = decoders.TokenSequenceConstraint(
@@ -152,6 +232,7 @@ class Orchestrator:
         # Use the model
         d = decoders.FormattedDecoder(models.GEN_TOKENIZER, sequence, jsonFormat=True)
         m = LLMManager.LLMManager(d)
+        m.kvCache = copy.deepcopy(self.caches["node1"])
         d.setManager(m)
 
         # Generate the response
@@ -179,28 +260,9 @@ class Orchestrator:
         Returns:
             - str: The final response.
         """
-        systemPrompt = (
-            "You are an expert videogame assistant. Your task is to answer the user's query using the provided documents.\n\n"
-            "ABOUT THE DOCUMENTS:\n"
-            " - Each document contains: Title, Genres, Description, Positive/Negative Reviews, and Associated Topics.\n"
-            " - NOTE: The 'Associated Topics' are extracted directly from user reviews, representing the key themes discussed by the community.\n"
-            " - CRITICAL: You will often receive up to 3 documents, but the user's query might only target one or two specific game. "
-            "Identify which document matches the user's intent, focus entirely on it, and IGNORE the other irrelevant documents. Do not try to combine them if it is not relevant.\n\n"
-            "CRITICAL RULES:\n"
-            "1. FOCUS & RELEVANCE: Answer using only the document(s) that actually matter for the query. If a document is irrelevant, disregard it completely.\n"
-            "2. OBJECTIVITY: Rely strictly on the provided data. If the documents do not contain the answer, politely state that you lack enough information.\n"
-            "3. NO CITATIONS: Integrate the facts naturally. Do NOT say 'According to Document 1...' or 'In the first game...'. Just talk about the game naturally.\n"
-            "4. TONE: Concise, direct, and objective."
-            "5. SUMMARIZATION: Do not give the document or a part of the document exactly as it is. Always rephrase and summarize the information in your own words. Do not use bullet points, just write normal paragraphs.\n"
-        )
-        self.completeExecution[f"{datetime.now()} Node 2 Prompt"] = systemPrompt
+        self.completeExecution[f"{datetime.now()} Node 2 Prompt"] = self.systemPrompt2
 
-        if getattr(self, "mainCache", None) is None:
-            messages = [{"role": "system", "content": systemPrompt}]
-            self.mainCache = None
-            self.completeConversation = []
-        else:
-            messages = []
+        messages = copy.deepcopy(self.completeConversation)
 
         if len(documents) > 0:
             documentsText = "\n\n".join(
@@ -214,16 +276,16 @@ class Orchestrator:
             finalText = ""
 
         messages.append({"role": "user", "content": finalText + q})
-        self.completeConversation.append({"role": "user", "content": finalText + q})
+        self.completeConversation.append({"role": "user", "content": q})
 
         # Use the model
         m = LLMManager.LLMManager(decoders.SamplingDecoder())
-        m.kvCache = self.mainCache
+        m.kvCache = copy.deepcopy(self.caches["node2"])
         finalResponse = m.processPrompt(messages, maxTokens=1000)
         response = m.decodeTokens(finalResponse)
 
         # Update the main caché
-        self.mainCache = m.kvCache
+        self.caches["node2"] = m.kvCache
         self.completeConversation.append({"role": "assistant", "content": response})
 
         self.completeExecution[f"{datetime.now()} Node 2 Output"] = response
@@ -255,17 +317,8 @@ class Orchestrator:
         Returns:
             - list: The list with the retrieved document.
         """
-        systemPrompt = (
-            "You are a helpful assistant. Your task is to identify the name of the videogame that the previous node is thinking is needed. If you are not sure about the name of the game, try to give your best guess.\n\n"
-            "REQUIRED STRUCTURE in JSON format:\n"
-            '{"Game": "[Name of the game]"}\n'
-        )
-
-        self.completeExecution[f"{datetime.now()} Node 4 Prompt"] = systemPrompt
-
+        self.completeExecution[f"{datetime.now()} Node 4 Prompt"] = self.systemPrompt4
         messages = copy.deepcopy(self.completeConversation)
-
-        messages.insert(0, {"role": "system", "content": systemPrompt})
         messages.append({"role": "user", "content": q})
 
         sequence = decoders.TokenSequenceConstraint(
@@ -280,6 +333,7 @@ class Orchestrator:
         # Use the model
         d = decoders.FormattedDecoder(models.GEN_TOKENIZER, sequence, jsonFormat=True)
         m = LLMManager.LLMManager(d)
+        m.kvCache = copy.deepcopy(self.caches["node4"])
         d.setManager(m)
 
         # Generate the response
@@ -321,7 +375,7 @@ class Orchestrator:
         if match:
             documents = [rag.generateDocument(match[0])] if match else []
             self.completeExecution[f"{datetime.now()} Node 5 Retrieved Document"] = (
-                documents[0]
+                documents[0] if documents else None
             )
 
         else:
@@ -382,7 +436,7 @@ class Orchestrator:
 
             documents = [rag.generateDocument(match[0])] if match else []
             self.completeExecution[f"{datetime.now()} Node 5 Retrieved Document"] = (
-                documents[0]
+                documents[0] if documents else None
             )
 
         return documents
@@ -397,22 +451,10 @@ class Orchestrator:
         Returns:
             - str: The simulated user response.
         """
-        systemPrompt = (
-            "You are simulating a HUMAN USER (a gamer) chatting with an AI videogame assistant. "
-            "Your job is to keep the conversation going naturally based on the history.\n\n"
-            "RULES FOR THE SIMULATION:\n"
-            "1. ROLE: You are the one asking questions, looking for recommendations, or asking for opinions about games. "
-            "NEVER answer your own questions, NEVER recommend games to the AI, and NEVER act like the assistant.\n"
-            "2. STYLE: Write like a normal human in a chat. Keep it casual, relatively short (1-2 sentences), and direct.\n"
-            "3. ACTIONS AVAILABLE:\n"
-            "   - Ask a follow-up question about the game the assistant just mentioned (e.g., 'Does it have multiplayer?', 'Is the story good?').\n"
-            "   - Ask for a recommendation based on a genre or vibe (e.g., 'Can you recommend a good indie horror game?').\n"
-            "   - If the conversation feels naturally finished or you have no more questions, just type exactly ':q' to exit. Do not say goodbye or thank you, just ':q'.\n"
-        )
         messages = copy.deepcopy(self.completeConversation)
-        messages.insert(0, {"role": "system", "content": systemPrompt})
 
         m = LLMManager.LLMManager(decoders.SamplingDecoder())
+        m.kvCache = copy.deepcopy(self.caches["nodeS"])
         finalResponse = m.processPrompt(messages, maxTokens=1000)
         response = m.decodeTokens(finalResponse)
 

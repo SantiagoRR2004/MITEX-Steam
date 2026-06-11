@@ -11,14 +11,17 @@ Esta base de conocimiento es la que permite el correcto funcionamiento de la fas
 ### Obtención de los datos
 
 La robustez técnica de la implementación se sostiene sobre un pipeline de procesamiento de datos dividido en módulos independientes donde cada uno resuelve una problemática específica del ciclo de vida de la información. En la fase inicial de obtención de datos, el problema principal radica en la volatilidad del mercado de videojuegos, donde los títulos más vendidos cambian diariamente. La solución implementada consiste en un script automatizado mediante una acción de GitHub que se ejecuta diariamente a medianoche para iterar sobre las listas de los más vendidos de Steam, almacenando los datos en un registro estructurado que crece de manera incremental. El resultado son dos archivos, uno dónde almacenamos el nombre del videojuego con su id (videogames.json):
+
 ![videogames.json](videogames.png)
 
 Y otro csv con los ids de los juegos más vendidos por cada día (topSellers.csv):
+
 ![topSellers.csv](topSellers.png)
 
 De esta manera, obtenemos un flujo de datos actualizado diariamente que alimenta el sistema con los títulos más relevantes del mercado, asegurando que el chatbot siempre tenga acceso a información actualizada.
 
 Con los ids de los juegos más vendidos, se ejecuta un proceso de extracción masiva de datos utilizando la API de Steam para obtener la ficha técnica de cada juego y sus reseñas. El resultado es un conjunto de archivos JSON. Tres por cada juego, los cuales uno contiene toda la información que la página principal del título en Steam proporciona; otra almacena las reseñas negativas del juego en inglés y el último, las positivas. Estos json se encuentran en la carpeta rawData:
+
 ![rawData](rawData.png)
 
 Además, para cada reseña almacenamos la puntuación de utilidad que los usuarios de Steam han otorgado a cada opinión, lo cual se convierte en un dato crucial para el posterior proceso de resumen extractivo basado en grafos, permitiendo priorizar las opiniones más valoradas por la comunidad.
@@ -29,9 +32,9 @@ Respecto a la limpieza de datos, el problema técnico identificado fue la alta r
 
 ![Expedition33 Info](expedition33info.png)
 
-![Expedition33 Negatives](image-1.png)
+![Expedition33 Negatives](expedition33negatives.png)
 
-![Expedition33 Positives](image-2.png)
+![Expedition33 Positives](expedition33positives.png)
 
 ### Modelado de tópicos
 
@@ -110,6 +113,8 @@ A pesar de la solidez general del pipeline, la evaluación crítica del sistema 
 
 ## Cambios aplicados desde la entrega inicial
 
-- Modoficaciones en los sistem prompts.
+- Modificaciones en los sistem prompts.
 
 - Cambio de toda el informe
+
+- Guardado de la caché KV de los system prompts de cada nodo en ficheros para no tener que volver a generarla.
