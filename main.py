@@ -351,8 +351,10 @@ class Orchestrator:
                 "a", class_="search_result_row ds_collapse_flag"
             ):
 
-                videogameID = int(result["data-ds-appid"])
-                videogameFoundName = result["href"].split("/")[5]
+                videogameID = int(result["href"].split("/")[4])
+                videogameFoundName = (
+                    result.find("span", class_="title").text.replace("/", "").strip()
+                )
 
                 if videogameFoundName not in videogames:
                     newVideogames[videogameFoundName] = videogameID

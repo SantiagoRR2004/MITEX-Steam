@@ -6,6 +6,7 @@ cleanData/
 languageLog.json
 topicsData/
 summaryData/
+cache/
 db/
 completeExecutions.json
 .env*
