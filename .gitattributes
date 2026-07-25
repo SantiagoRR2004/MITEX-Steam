@@ -3,3 +3,7 @@
 
 # Use LFS for JSONL files
 *.jsonl filter=lfs diff=lfs merge=lfs -text
+
+# Detect CSV and JSON files
+*.csv linguist-detectable=true
+*.json linguist-detectable=true
