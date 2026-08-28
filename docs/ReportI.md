@@ -6,7 +6,7 @@ Usamos Steam porque tiene mucha información disponible gracias a la ideología 
 
 ## Elegir juegos
 
-Para elegir los videojuegos se usa el enlace <https://store.steampowered.com/search/results/?filter=globaltopsellers&hidef2p=1&json=1>. Iterando por 4 páginas se obtienen los 100 juegos más vendidos no gratuítos en Steam. Con esta información se guarda en el fichero [`videogames.json`](../videogames.json) el nombre del juego y su id en Steam.
+Para elegir los videojuegos se usa el enlace <https://store.steampowered.com/search/results/?filter=globaltopsellers&hidef2p=1&json=1>. Iterando por 4 páginas se obtienen los 100 juegos más vendidos no gratuítos en Steam. Con esta información se guarda en el fichero [`videogames.json`](../TopSellers/videogames.json) el nombre del juego y su id en Steam.
 
 Pero si se abre el fichero se ve que hay más de 100 juegos. Esto se debe a que cada día aparecen nuevos juegos entre los top 100 mientras que desaparecen otros. Para mantener nuestra lista actualizada con los nuevos y viejos mejores videojuegos, se ejecuta una acción de GitHub que actualiza el fichero cada día (`0 0 * * *`) y en cada actualización se añaden los nuevos juegos a la lista.
 
@@ -156,11 +156,11 @@ Al igual que en el Nodo 1, se aplica `TokenSequenceConstraint` para forzar la es
 
 Este nodo recibe el nombre extraído por el Nodo 4 y es el responsable de recuperar el documento final del juego.
 
-1. Primero intenta encontrar una coincidencia aproximada en [`videogames.json`](../videogames.json) usando `difflib.get_close_matches` con `cutoff=0.6`.
+1. Primero intenta encontrar una coincidencia aproximada en [`videogames.json`](../TopSellers/videogames.json) usando `difflib.get_close_matches` con `cutoff=0.6`.
 2. Si encuentra coincidencia, genera el documento con `rag.generateDocument` y lo devuelve.
 3. Si no encuentra coincidencia:
    1. Hace una búsqueda web en Steam (`https://store.steampowered.com/search/results/`) con `BeautifulSoup`.
-   2. Detecta juegos nuevos, actualiza [`videogames.json`](../videogames.json).
+   2. Detecta juegos nuevos, actualiza [`videogames.json`](../TopSellers/videogames.json).
    3. Ejecuta `updateData()` para incorporar esos nuevos juegos al pipeline completo (limpieza, tópicos, resumen extractivo y colección RAG).
    4. Vuelve a intentar la coincidencia sobre los juegos nuevos y, si encuentra uno válido, genera su documento.
 

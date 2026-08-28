@@ -1,6 +1,6 @@
+from TopSellers import dataAcquisition
 from datetime import datetime
 from bs4 import BeautifulSoup
-import dataAcquisition
 import dataHandling
 import topicModeling
 import extractiveSummary
@@ -363,7 +363,9 @@ class Orchestrator:
             - list: The list with the retrieved document.
         """
         # Try to find the closest match
-        videogamesFile = os.path.join(self.currentDirectory, "videogames.json")
+        videogamesFile = os.path.join(
+            self.currentDirectory, "TopSellers", "videogames.json"
+        )
         with open(videogamesFile, "r", encoding="utf-8") as f:
             videogames = json.load(f)
 
